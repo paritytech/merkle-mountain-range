@@ -213,8 +213,7 @@ fn test_proof_verification() {
     let proof: MerkleProof<MyItem, MyMerge> = MerkleProof::new(11, proof_items);
     println!("Proof: {:#?}", proof);
     // Verification works, the proof shows that the number 31337 is in the MMR (based on the actual root) even if it this number has never been added to it.
-    let verify_result = proof.verify(root, leaves_to_verify).unwrap();
-    println!("verify_result={}", verify_result);
+    assert!(!proof.verify(root, leaves_to_verify).unwrap());
 }
 
 prop_compose! {
