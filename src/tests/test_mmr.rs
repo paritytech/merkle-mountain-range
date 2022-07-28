@@ -145,6 +145,78 @@ fn test_gen_proof_with_duplicate_leaves() {
     test_mmr(10, vec![5, 5]);
 }
 
+#[test]
+fn test_proof_verification() {
+    use std::fmt::{Debug, Formatter};
+    use crate::{util::MemMMR, Merge, MerkleProof};
+
+    // Simple item struct to allow debugging the contents of MMR nodes/peaks
+    #[derive(Clone, PartialEq)]
+    enum MyItem{
+        Number(u32),
+        Merged(Box<MyItem>, Box<MyItem>)
+    }
+
+    fn merged(a: MyItem, b: MyItem) -> MyItem{
+        return MyItem::Merged(Box::new(a), Box::new(b));
+    }
+
+    fn merged_u32(a: u32, b: u32) -> MyItem{
+        return MyItem::Merged(Box::new(MyItem::Number(a)), Box::new(MyItem::Number(b)));
+    }
+
+    impl Debug for MyItem{
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            match self{
+                MyItem::Number(x) => {
+                    f.write_fmt(format_args!("{}", x))
+                }
+                MyItem::Merged(a, b) => {
+                    f.write_fmt(format_args!("Merged({:#?}, {:#?})", a, b))
+                }
+            }
+        }
+    }
+
+    #[derive(Debug)]
+    struct MyMerge;
+
+    impl Merge for MyMerge {
+        type Item = MyItem;
+        fn merge(lhs: &Self::Item, rhs: &Self::Item) -> Result<Self::Item, crate::Error> {
+            return Ok(MyItem::Merged(Box::new(lhs.clone()), Box::new(rhs.clone())));
+        }
+    }
+
+    // Let's build a simple MMR with the numbers 0 to 6
+    let mut mmr: MemMMR<MyItem, MyMerge> = MemMMR::default();
+    let mut positions: Vec<u64> = Vec::new();
+    for i in 0u32..7{
+        let pos = mmr.push(MyItem::Number(i)).unwrap();
+        positions.push(pos);
+    }
+    let root = mmr.get_root().unwrap();
+    println!("Root: {:#?}", root);
+    println!("positions = {:#?}", positions);
+    // Even if the MMR only contains the numbers 0 to 6, let's still try to proof that the number 31337 is in it
+    // Please note that the "leaves" also contain a peak. Depending on the code using the MMR verification,
+    // this additional entry may get ignored.
+    let leaves_to_verify = vec![
+        (1, MyItem::Number(31337)),
+        (6, merged(merged_u32(0,1), merged_u32(2, 3)))
+    ];
+    // For that to work we also need an appropriate proof, so let's build that proof here
+    let proof_items = vec![
+        merged(merged_u32(0, 1), merged_u32(2, 3)),
+        merged(MyItem::Number(6), merged_u32(4, 5))
+    ];
+    let proof: MerkleProof<MyItem, MyMerge> = MerkleProof::new(11, proof_items);
+    println!("Proof: {:#?}", proof);
+    // Verification works, the proof shows that the number 31337 is in the MMR (based on the actual root) even if it this number has never been added to it.
+    let verify_result = proof.verify(root, leaves_to_verify).unwrap();
+    println!("verify_result={}", verify_result);
+}
+
 prop_compose! {
     fn count_elem(count: u32)
                 (elem in 0..count)
