@@ -296,8 +296,12 @@ fn calculate_peak_root<
     // calculate tree root from each items
     while let Some((pos, item, height)) = queue.pop_front() {
         if pos == peak_pos {
-            // return root
-            return Ok(item);
+            if queue.is_empty() {
+                // return root
+                return Ok(item);
+            }
+            // if queue not empty, push peak back to the end
+            queue.push_back((pos, item.clone(), height))
         }
         // calculate sibling
         let next_height = pos_height_in_tree(pos + 1);
@@ -324,16 +328,7 @@ fn calculate_peak_root<
         }?;
 
         if parent_pos < peak_pos {
-            let peak_pos_in_queue = queue
-                .iter()
-                .enumerate()
-                .find(|(_, (pos, _, _))| *pos == peak_pos);
-
-            match peak_pos_in_queue {
-                Some((pos, _)) => {
-                    queue.insert(pos, (parent_pos, parent_item, height + 1))}
-                None => {queue.push_back((parent_pos, parent_item, height + 1))}
-            }
+            queue.push_back((parent_pos, parent_item, height + 1))
         } else {
             return Ok(parent_item);
         }
