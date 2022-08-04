@@ -290,7 +290,7 @@ fn calculate_peak_root<
     // (position, hash, height)
     let mut queue: VecDeque<_> = leaves
         .into_iter()
-        .map(|(pos, item)| (pos, item, 0u32))
+        .map(|(pos, item)| (pos, item, pos_height_in_tree(pos)))
         .collect();
 
     // calculate tree root from each items
@@ -324,7 +324,16 @@ fn calculate_peak_root<
         }?;
 
         if parent_pos < peak_pos {
-            queue.push_back((parent_pos, parent_item, height + 1));
+            let peak_pos_in_queue = queue
+                .iter()
+                .enumerate()
+                .find(|(_, (pos, _, _))| *pos == peak_pos);
+
+            match peak_pos_in_queue {
+                Some((pos, _)) => {
+                    queue.insert(pos, (parent_pos, parent_item, height + 1))}
+                None => {queue.push_back((parent_pos, parent_item, height + 1))}
+            }
         } else {
             return Ok(parent_item);
         }

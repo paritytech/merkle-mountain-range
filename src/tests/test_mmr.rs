@@ -146,7 +146,7 @@ fn test_gen_proof_with_duplicate_leaves() {
 }
 
 #[test]
-fn test_proof_verification() {
+fn test_invalid_proof_verification() {
     use std::fmt::{Debug, Formatter};
     use crate::{util::MemMMR, Merge, MerkleProof};
 
