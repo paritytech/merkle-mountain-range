@@ -343,7 +343,11 @@ fn calculate_peak_root<
         if parent_pos < peak_pos {
             queue.push_back((parent_pos, parent_item, height + 1))
         } else {
-            debug_assert!(queue.is_empty());
+            debug_assert!(
+                queue.is_empty() ||
+                    queue.iter().all(|entry|entry == &(parent_pos, parent_item.clone(), height + 1))
+            );
+            println!("queue: {:?}", queue);
             return Ok(parent_item);
         }
     }
