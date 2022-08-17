@@ -308,7 +308,9 @@ fn calculate_peak_root<
     // calculate tree root from each items
     while let Some((pos, item, height)) = queue.pop_front() {
         if pos == peak_pos {
-            if queue.is_empty() {
+            if queue.is_empty()
+            // if queue.is_empty() || queue.iter().all(|entry| entry == &(pos, item.clone(), height))
+            {
                 // return root
                 return Ok(item);
             }
@@ -331,6 +333,8 @@ fn calculate_peak_root<
         let sibling_item = if Some(&sib_pos) == queue.front().map(|(pos, _, _)| pos) {
             queue.pop_front().map(|(_, item, _)| item).unwrap()
         } else {
+            // this is buggy
+            // if queue.front().0 == parent_pos { proof_iter. }
             proof_iter.next().ok_or(Error::CorruptedProof)?.clone()
         };
 
@@ -343,11 +347,10 @@ fn calculate_peak_root<
         if parent_pos < peak_pos {
             queue.push_back((parent_pos, parent_item, height + 1))
         } else {
-            debug_assert!(
-                queue.is_empty() ||
-                    queue.iter().all(|entry|entry == &(parent_pos, parent_item.clone(), height + 1))
-            );
-            println!("queue: {:?}", queue);
+            // debug_assert!(
+            //     queue.is_empty() ||
+            //         queue.iter().all(|entry|entry == &(parent_pos, parent_item.clone(), height + 1))
+            // );
             return Ok(parent_item);
         }
     }
