@@ -1,5 +1,5 @@
 use super::{MergeNumberHash, NumberHash};
-use crate::{leaf_index_to_mmr_size, util::MemStore, Error, MMR};
+use crate::{leaf_index_to_mmr_size, util::MemStore, Error, MMR, MMRStore, helper::get_peaks};
 use faster_hex::hex_string;
 use proptest::prelude::*;
 use rand::{seq::SliceRandom, thread_rng};
@@ -201,19 +201,22 @@ fn test_invalid_proof_verification() {
     // Even if the MMR only contains the numbers 0 to 6, let's still try to proof that the number 31337 is in it
     // Please note that the "leaves" also contain a peak. Depending on the code using the MMR verification,
     // this additional entry may get ignored.
-    let leaves_to_verify = vec![
-        (1, MyItem::Number(31337)),
-        (6, merged(merged_u32(0,1), merged_u32(2, 3)))
-    ];
-    // For that to work we also need an appropriate proof, so let's build that proof here
-    let proof_items = vec![
+    let positions_to_verify = vec![1, 6];
+
+    let leaves_to_verify: Vec<(u64, MyItem)> = positions_to_verify.iter().map(|pos| (*pos, mmr.store().get_elem(*pos).unwrap().unwrap())).collect();
+
+    let mut fraudulent_leaves_to_verify = leaves_to_verify.clone();
+    fraudulent_leaves_to_verify[0] = (fraudulent_leaves_to_verify[0].0, MyItem::Number(31337));
+
+    // this fraudulent proof worked before the bug fix, let's test it again
+    let fraudulent_proof_items = vec![
         merged(merged_u32(0, 1), merged_u32(2, 3)),
         merged(MyItem::Number(6), merged_u32(4, 5))
     ];
-    let proof: MerkleProof<MyItem, MyMerge> = MerkleProof::new(11, proof_items);
-    println!("Proof: {:#?}", proof);
-    // Verification works, the proof shows that the number 31337 is in the MMR (based on the actual root) even if it this number has never been added to it.
-    assert!(!proof.verify(root, leaves_to_verify).unwrap());
+    let fraudulent_proof: MerkleProof<MyItem, MyMerge> = MerkleProof::new(11, fraudulent_proof_items);
+
+    // verification of the fraudulent leaves fails for both proofs
+    assert!(!fraudulent_proof.verify(root.clone(), fraudulent_leaves_to_verify.clone()).unwrap());
 }
 
 prop_compose! {
