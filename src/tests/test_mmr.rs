@@ -220,7 +220,14 @@ fn test_invalid_proof_verification() {
     let positions_only_peaks = positions_to_verify.iter().all(|pos| get_peaks(11).contains(pos));
     let proof = mmr.gen_proof(if positions_only_peaks {positions_to_verify}
                               else {positions_to_verify.iter().map(|pos| *pos)
-                                    .filter(|pos| !get_peaks(11).contains(pos))
+                                    .filter(|pos| {
+                                        let peaks = get_peaks(11);
+                                        if let Ok(peak_index) = peaks.binary_search(pos) {
+                                            !positions_to_verify.iter().any(|pos| if peak_index == 0
+                                                                            {pos < &peaks[peak_index]} else
+                                                                            {&peaks[peak_index-1] < pos && pos < &peaks[peak_index]})
+                                        } else {true}
+                                    })
                                     .collect()}).unwrap();
     println!("genuine proof: {:?}", proof);
 
