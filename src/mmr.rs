@@ -127,7 +127,7 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
             return Ok(());
         }
 
-        let mut queue: VecDeque<_> = pos_list.into_iter().map(|pos| (pos, 0u32)).collect();
+        let mut queue: VecDeque<_> = pos_list.into_iter().map(|pos| (pos, pos_height_in_tree(pos))).collect();
         // Generate sub-tree merkle proof for positions
         while let Some((pos, height)) = queue.pop_front() {
             debug_assert!(pos <= peak_pos);
