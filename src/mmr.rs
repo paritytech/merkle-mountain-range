@@ -127,7 +127,11 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
             return Ok(());
         }
 
+        #[cfg(feature = "nodeproofs")]
         let mut queue: VecDeque<_> = pos_list.into_iter().map(|pos| (pos, pos_height_in_tree(pos))).collect();
+        #[cfg(not(feature = "nodeproofs"))]
+        let mut queue: VecDeque<_> = pos_list.into_iter().map(|pos| (pos, 0u32)).collect();
+
         // Generate sub-tree merkle proof for positions
         while let Some((pos, height)) = queue.pop_front() {
             debug_assert!(pos <= peak_pos);
@@ -288,9 +292,17 @@ fn calculate_peak_root<
 ) -> Result<T> {
     debug_assert!(!leaves.is_empty(), "can't be empty");
     // (position, hash, height)
+
+    #[cfg(feature = "nodeproofs")]
     let mut queue: VecDeque<_> = leaves
         .into_iter()
         .map(|(pos, item)| (pos, item, pos_height_in_tree(pos)))
+        .collect();
+
+    #[cfg(not(feature = "nodeproofs"))]
+    let mut queue: VecDeque<_> = leaves
+        .into_iter()
+        .map(|(pos, item)| (pos, item, 0))
         .collect();
 
     // calculate tree root from each items
