@@ -145,8 +145,12 @@ fn test_gen_proof_with_duplicate_leaves() {
     test_mmr(10, vec![5, 5]);
 }
 
-#[test]
-fn test_invalid_proof_verification() {
+fn test_invalid_proof_verification(
+    leaf_count: u32,
+    positions_to_verify: Vec<u64>,
+    invalid_proof_positions: Vec<usize>,
+)
+{
     use std::fmt::{Debug, Formatter};
     use crate::{util::MemMMR, Merge, MerkleProof};
 
@@ -191,22 +195,22 @@ fn test_invalid_proof_verification() {
     // Let's build a simple MMR with the numbers 0 to 6
     let mut mmr: MemMMR<MyItem, MyMerge> = MemMMR::default();
     let mut positions: Vec<u64> = Vec::new();
-    for i in 0u32..7{
+    for i in 0u32..leaf_count{
         let pos = mmr.push(MyItem::Number(i)).unwrap();
         positions.push(pos);
     }
     let root = mmr.get_root().unwrap();
     println!("Root: {:#?}", root);
     println!("positions = {:#?}", positions);
-    // Even if the MMR only contains the numbers 0 to 6, let's still try to proof that the number 31337 is in it
-    // Please note that the "leaves" also contain a peak. Depending on the code using the MMR verification,
-    // this additional entry may get ignored.
-    let positions_to_verify = vec![1, 6, 8, 10];
 
-    let leaves_to_verify: Vec<(u64, MyItem)> = positions_to_verify.iter().map(|pos| (*pos, mmr.store().get_elem(*pos).unwrap().unwrap())).collect();
 
-    let mut fraudulent_leaves_to_verify = leaves_to_verify.clone();
-    fraudulent_leaves_to_verify[0] = (fraudulent_leaves_to_verify[0].0, MyItem::Number(31337));
+    let entries_to_verify: Vec<(u64, MyItem)> = positions_to_verify.iter().map(|pos| (*pos, mmr.store().get_elem(*pos).unwrap().unwrap())).collect();
+
+    let mut fraudulent_leaves_to_verify = entries_to_verify.clone();
+    invalid_proof_positions
+        .iter()
+        .for_each(|proof_pos|
+                  {fraudulent_leaves_to_verify[*proof_pos] = (fraudulent_leaves_to_verify[*proof_pos].0, MyItem::Number(31337))});
 
     // this fraudulent proof worked before the bug fix, let's test it again
     let fraudulent_proof_items = vec![
@@ -236,7 +240,26 @@ fn test_invalid_proof_verification() {
     assert!(!proof.verify(root.clone(), fraudulent_leaves_to_verify).unwrap());
 
     // verification of the correct leaves passes
-    assert!(proof.verify(root, leaves_to_verify).unwrap());
+    assert!(proof.verify(root, entries_to_verify).unwrap());
+}
+
+#[test]
+fn test_generic_proofs() {
+    // working
+    test_invalid_proof_verification(7, vec![5], vec![0]);
+    // original example:
+    test_invalid_proof_verification(7, vec![1, 6], vec![0]);
+    test_invalid_proof_verification(7, vec![5, 6], vec![0]);
+    test_invalid_proof_verification(7, vec![1, 5, 7], vec![0]);
+    test_invalid_proof_verification(7, vec![5, 6, 7], vec![0]);
+    test_invalid_proof_verification(7, vec![5, 6, 7, 8, 9, 10], vec![0]);
+    test_invalid_proof_verification(7, vec![0, 1, 5, 7, 8, 9, 10], vec![0]);
+
+    // not working with default proof generation
+    // TODO: fix cases where child & parent are both to be proven:
+    // test_invalid_proof_verification(7, vec![1, 5, 6], vec![0]);
+    // test_invalid_proof_verification(7, vec![1, 2], vec![0]);
+    // test_invalid_proof_verification(7, vec![1, 5], vec![0]);
 }
 
 prop_compose! {
