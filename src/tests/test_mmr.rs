@@ -201,7 +201,7 @@ fn test_invalid_proof_verification() {
     // Even if the MMR only contains the numbers 0 to 6, let's still try to proof that the number 31337 is in it
     // Please note that the "leaves" also contain a peak. Depending on the code using the MMR verification,
     // this additional entry may get ignored.
-    let positions_to_verify = vec![1, 6];
+    let positions_to_verify = vec![1, 5];
 
     let leaves_to_verify: Vec<(u64, MyItem)> = positions_to_verify.iter().map(|pos| (*pos, mmr.store().get_elem(*pos).unwrap().unwrap())).collect();
 
