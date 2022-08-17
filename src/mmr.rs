@@ -301,7 +301,8 @@ fn calculate_peak_root<
                 return Ok(item);
             }
             // if queue not empty, push peak back to the end
-            queue.push_back((pos, item.clone(), height))
+            queue.push_back((pos, item.clone(), height));
+            continue
         }
         // calculate sibling
         let next_height = pos_height_in_tree(pos + 1);
