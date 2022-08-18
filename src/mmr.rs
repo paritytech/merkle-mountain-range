@@ -277,8 +277,8 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
         }
     }
 
-    pub fn verify(&self, root: T, leaves: Vec<(u64, T)>) -> Result<bool> {
-        self.calculate_root(leaves)
+    pub fn verify(&self, root: T, nodes: Vec<(u64, T)>) -> Result<bool> {
+        self.calculate_root(nodes)
             .map(|calculated_root| calculated_root == root)
     }
 }
