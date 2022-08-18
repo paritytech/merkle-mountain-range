@@ -268,6 +268,7 @@ fn test_invalid_proof_verification(
     assert!(proof.verify(root, entries_to_verify).unwrap());
 }
 
+#[cfg(feature = "nodeproofs")]
 #[test]
 fn test_generic_proofs() {
     // working with proof generation
