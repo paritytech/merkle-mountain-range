@@ -139,7 +139,11 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
         while let Some((pos, height)) = queue.pop_front() {
             debug_assert!(pos <= peak_pos);
             if pos == peak_pos {
-                break;
+                if queue.is_empty() {
+                    break;
+                } else {
+                    continue;
+                }
             }
 
             // calculate sibling
