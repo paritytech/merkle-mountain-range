@@ -286,8 +286,9 @@ fn test_invalid_proof_verification(
 fn test_generic_proofs() {
     // working with proof generation
     test_invalid_proof_verification(7, vec![5], vec![0], None, None);
-    // original example:
+    // original example with proof items [Merged(Merged(0, 1), Merged(2, 3)), Merged(4, 5), 6]:
     test_invalid_proof_verification(7, vec![1, 6], vec![0], None, Some(vec![6, 9, 10]));
+    // original example, but with correct proof items [0, Merged(2, 3), Merged(6, Merged(4, 5))]
     test_invalid_proof_verification(7, vec![1, 6], vec![0], None, None);
     test_invalid_proof_verification(7, vec![1, 6], vec![0], Some(vec![0, 5, 9, 10]), None);
     test_invalid_proof_verification(7, vec![5, 6], vec![0], None, None);
