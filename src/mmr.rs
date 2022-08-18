@@ -311,8 +311,16 @@ fn calculate_peak_root<
     // calculate tree root from each items
     while let Some((pos, item, height)) = queue.pop_front() {
         if pos == peak_pos {
+            if queue
+                .iter()
+                .any(|entry| entry.0 == peak_pos && entry.1 != item)
+            {
+                return Err(Error::CorruptedProof);
+            }
             if queue.is_empty()
-            // if queue.is_empty() || queue.iter().all(|entry| entry == &(pos, item.clone(), height))
+                || queue
+                    .iter()
+                    .all(|entry| entry == &(peak_pos, item.clone(), height))
             {
                 // return root
                 return Ok(item);
@@ -347,14 +355,10 @@ fn calculate_peak_root<
             M::merge(&item, &sibling_item)
         }?;
 
-        if parent_pos < peak_pos {
+        if parent_pos <= peak_pos {
             queue.push_back((parent_pos, parent_item, height + 1))
         } else {
-            // debug_assert!(
-            //     queue.is_empty() ||
-            //         queue.iter().all(|entry|entry == &(parent_pos, parent_item.clone(), height + 1))
-            // );
-            return Ok(parent_item);
+            return Err(Error::CorruptedProof);
         }
     }
     Err(Error::CorruptedProof)
