@@ -128,7 +128,10 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
         }
 
         #[cfg(feature = "nodeproofs")]
-        let mut queue: VecDeque<_> = pos_list.into_iter().map(|pos| (pos, pos_height_in_tree(pos))).collect();
+        let mut queue: VecDeque<_> = pos_list
+            .into_iter()
+            .map(|pos| (pos, pos_height_in_tree(pos)))
+            .collect();
         #[cfg(not(feature = "nodeproofs"))]
         let mut queue: VecDeque<_> = pos_list.into_iter().map(|pos| (pos, 0u32)).collect();
 
@@ -316,7 +319,7 @@ fn calculate_peak_root<
             }
             // if queue not empty, push peak back to the end
             queue.push_back((pos, item.clone(), height));
-            continue
+            continue;
         }
         // calculate sibling
         let next_height = pos_height_in_tree(pos + 1);
