@@ -311,18 +311,21 @@ fn calculate_peak_root<
     // calculate tree root from each items
     while let Some((pos, item, height)) = queue.pop_front() {
         if pos == peak_pos {
+            if queue.is_empty() {
+                // return root once queue is consumed
+                return Ok(item);
+            }
             if queue
                 .iter()
                 .any(|entry| entry.0 == peak_pos && entry.1 != item)
             {
                 return Err(Error::CorruptedProof);
             }
-            if queue.is_empty()
-                || queue
-                    .iter()
-                    .all(|entry| entry == &(peak_pos, item.clone(), height))
+            if queue
+                .iter()
+                .all(|entry| entry == &(peak_pos, item.clone(), height))
             {
-                // return root
+                // return root if remaining queue consists only of duplicate root entries
                 return Ok(item);
             }
             // if queue not empty, push peak back to the end
