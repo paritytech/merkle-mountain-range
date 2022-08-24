@@ -131,11 +131,12 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
 
         #[cfg(feature = "nodeproofs")]
         let mut queue: VecDeque<_> = pos_list
+            .clone()
             .into_iter()
             .map(|pos| (pos, pos_height_in_tree(pos)))
             .collect();
         #[cfg(not(feature = "nodeproofs"))]
-        let mut queue: VecDeque<_> = pos_list.into_iter().map(|pos| (pos, 0u32)).collect();
+        let mut queue: VecDeque<_> = pos_list.clone().into_iter().map(|pos| (pos, 0u32)).collect();
 
         // Generate sub-tree merkle proof for positions
         while let Some((pos, height)) = queue.pop_front() {
@@ -161,18 +162,40 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
                 }
             };
 
-            if Some(&sib_pos) == queue.front().map(|(pos, _)| pos) {
+            let queue_front_pos = queue.front().map(|(pos, _)| pos);
+            if Some(&sib_pos) == queue_front_pos {
                 // drop sibling
                 queue.pop_front();
-            } else {
-                proof.push(
+            } else if queue_front_pos.is_none() ||
+                queue_front_pos.unwrap() > &sib_pos ||
+                pos_height_in_tree(*queue_front_pos.unwrap()) >= height
+                // only push a sibling into the proof if either of these cases is satisfied:
+                // 1. the queue is empty
+                // 2. the next item in the queue is not the sibling or a child of it
+                // 3. the next item in the queue has greater height than the current item
+            {
+                let sibling =
                     (sib_pos,
                      self.batch
-                     .get_elem(sib_pos)?
-                     .ok_or(Error::InconsistentStore)?,
-                     )
-                );
-            }
+                     .get_elem(sib_pos.clone())?
+                     .ok_or(Error::InconsistentStore)?);
+                // only push sibling if it's not already a proof item,
+                // which can be the case if both a child and its parent are to be proven
+                // if !(proof.last() == Some(&sibling)) {proof.push(sibling)};
+                // proof.push(sibling);
+
+                // only push sibling if it's not already a proof item, a position to be proven,
+                // or its children don't already demand it
+                // (or if one of its descendants is not to be proven next)
+
+                if  height == 0
+                    || !(proof.contains(&sibling))
+                    && pos_list.binary_search(&sib_pos).is_err()
+                    {
+                        proof.push(sibling);
+                    }
+
+            } else {println!("sib_pos {:?} not added to queue {:?} with queue front pos {:?}", sib_pos, queue, queue_front_pos)}
             if parent_pos < peak_pos {
                 // save pos to tree buf
                 queue.push_back((parent_pos, height + 1));
@@ -214,9 +237,12 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
             return Err(Error::GenProofForInvalidLeaves);
         }
 
+        // if more than one peak, they can be bagged (but *don't* have to)
         // if bagging_track > 1 {
-        //     let rhs_peaks = proof.split_off(proof.len() - bagging_track).iter().cloned().map(|(_, item)| item).collect();
-        //     proof.push((self.mmr_size, self.bag_rhs_peaks(rhs_peaks)?.expect("bagging rhs peaks")));
+        //     println!("original proof: {:?}", proof);
+        //     let rhs_peaks = proof.split_off(proof.len() - bagging_track);
+        //     proof.push(self.bag_rhs_peaks(rhs_peaks)?.expect("bagging rhs peaks"));
+        //     println!("bagged proof: {:?}", proof);
         // }
 
         proof.sort_by_key(|(pos, _)| *pos);
@@ -309,13 +335,13 @@ fn calculate_peak_root<
     // (position, hash, height)
 
     #[cfg(feature = "nodeproofs")]
-    let mut queue: VecDeque<_> = nodes
+    let mut queue: VecDeque<_> = nodes.clone()
         .into_iter()
         .map(|(pos, item)| (pos, item, pos_height_in_tree(pos)))
         .collect();
 
     #[cfg(not(feature = "nodeproofs"))]
-    let mut queue: VecDeque<_> = nodes
+    let mut queue: VecDeque<_> = nodes.clone()
         .into_iter()
         .map(|(pos, item)| (pos, item, 0u32))
         .collect();
@@ -341,7 +367,7 @@ fn calculate_peak_root<
                 return Ok(item);
             }
             // if queue not empty, push peak back to the end
-            queue.push_back((pos, item.clone(), height));
+            queue.push_back((pos, item, height));
             continue;
         }
         // calculate sibling
@@ -358,11 +384,31 @@ fn calculate_peak_root<
         };
         let sibling_item = if Some(&sib_pos) == queue.front().map(|(pos, _, _)| pos) {
             queue.pop_front().map(|(_, item, _)| item).unwrap()
-        } else {
-            // this is buggy
-            // if queue.front().0 == parent_pos { proof_iter. }
-            // proof_iter.next().ok_or(Error::CorruptedProof)?.1.clone()
-            return Err(Error::CorruptedProof);
+        }
+        else if Some(&sib_pos) == queue.back().map(|(pos, _, _)| pos) {
+            queue.pop_back().map(|(_, item, _)| item).unwrap()
+        }
+        else if Some(&sib_pos) == queue.get(1).map(|(pos, _, _)| pos) {
+            let front = queue.pop_front().unwrap();
+            let second_front = queue.pop_front().map(|(_, item, _)| item).unwrap();
+            queue.push_front(front);
+            second_front
+        }
+        // handle special if next queue item is descendant of sibling
+        else if height > 0
+            && queue.front().is_some()
+            && (
+                (pos < sib_pos && queue.iter().any(|(n_pos, _, _)| &pos < n_pos && n_pos < &sib_pos))
+                    ||
+                    (sib_pos < pos && queue.iter().any(|(n_pos, _, _)| n_pos < &sib_pos))
+            )
+        {
+                queue.push_back((pos, item, height));
+            continue;
+        }
+        else
+        {
+            return Err(Error::CorruptedProof)
         };
 
         let parent_item = if next_height > height {
@@ -372,7 +418,13 @@ fn calculate_peak_root<
         }?;
 
         if parent_pos <= peak_pos {
-            queue.push_back((parent_pos, parent_item, height + 1))
+            let parent = (parent_pos, parent_item.clone(), height + 1);
+            if peak_pos == parent_pos
+                || !(queue.front() == Some(&parent) || queue.back() == Some(&parent))
+                && !nodes.contains(&(parent_pos, parent_item))
+            {
+                queue.push_back(parent)
+            };
         } else {
             return Err(Error::CorruptedProof);
         }
