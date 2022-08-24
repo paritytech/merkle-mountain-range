@@ -219,6 +219,8 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
         //     proof.push((self.mmr_size, self.bag_rhs_peaks(rhs_peaks)?.expect("bagging rhs peaks")));
         // }
 
+        proof.sort_by_key(|(pos, _)| *pos);
+
         Ok(MerkleProof::new(self.mmr_size, proof))
     }
 
@@ -297,11 +299,11 @@ fn calculate_peak_root<
     'a,
     T: 'a + PartialEq + Debug + Clone,
     M: Merge<Item = T>,
-    I: Iterator<Item = &'a (u64, T)>,
+    // I: Iterator<Item = &'a (u64, T)>,
 >(
     nodes: Vec<(u64, T)>,
     peak_pos: u64,
-    proof_iter: &mut I,
+    // proof_iter: &mut I,
 ) -> Result<T> {
     debug_assert!(!nodes.is_empty(), "can't be empty");
     // (position, hash, height)
@@ -359,7 +361,8 @@ fn calculate_peak_root<
         } else {
             // this is buggy
             // if queue.front().0 == parent_pos { proof_iter. }
-            proof_iter.next().ok_or(Error::CorruptedProof)?.1.clone()
+            // proof_iter.next().ok_or(Error::CorruptedProof)?.1.clone()
+            return Err(Error::CorruptedProof);
         };
 
         let parent_item = if next_height > height {
@@ -391,8 +394,14 @@ fn calculate_peaks_hashes<
     if mmr_size == 1 && nodes.len() == 1 && nodes[0].0 == 0 {
         return Ok(nodes.into_iter().map(|(_pos, item)| item).collect());
     }
+
+    let mut local_proof_items: Vec<(u64, T)> = proof_iter.cloned().collect();
+
+    nodes.append(&mut local_proof_items);
+
     // ensure nodes are sorted and unique
     nodes.sort_by_key(|(pos, _)| *pos);
+    println!("nodes in the proof: {:?}", nodes);
     nodes.dedup_by(|a, b| a.0 == b.0);
     let peaks = get_peaks(mmr_size);
 
@@ -404,16 +413,17 @@ fn calculate_peaks_hashes<
             nodes.remove(0).1
         } else if nodes.is_empty() {
             // if empty, means the next proof is a peak root or rhs bagged root
-            if let Some((_, peak_root)) = proof_iter.next() {
-                peak_root.clone()
-            } else {
+            // if let Some((_, peak_root)) = proof_iter.next() {
+            //     peak_root.clone()
+            // } else {
                 // means that either all right peaks are bagged, or proof is corrupted
                 // so we break loop and check no items left
                 break;
-            }
+            // }
         } else {
-            calculate_peak_root::<_, M, _>(nodes, peak_pos, &mut proof_iter)?
+            calculate_peak_root::<_, M>(nodes, peak_pos)?
         };
+        println!("calculated peak: {:?}", peak_root);
         peaks_hashes.push(peak_root.clone());
     }
 
@@ -423,13 +433,13 @@ fn calculate_peaks_hashes<
     }
 
     // check rhs peaks
-    if let Some((_, rhs_peaks_hashes)) = proof_iter.next() {
-        peaks_hashes.push(rhs_peaks_hashes.clone());
-    }
+    // if let Some((_, rhs_peaks_hashes)) = proof_iter.next() {
+    //     peaks_hashes.push(rhs_peaks_hashes.clone());
+    // }
     // ensure nothing left in proof_iter
-    if proof_iter.next().is_some() {
-        return Err(Error::CorruptedProof);
-    }
+    // if proof_iter.next().is_some() {
+    //     return Err(Error::CorruptedProof);
+    // }
     Ok(peaks_hashes)
 }
 
