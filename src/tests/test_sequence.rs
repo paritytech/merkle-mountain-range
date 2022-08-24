@@ -70,7 +70,7 @@ fn test_sequence_sub_func(count: u32, proof_elem: Vec<u32>) {
         )
         .expect("gen_proof");
     for item in proof.proof_items() {
-        assert!(item.is_normalized())
+        assert!(item.1.is_normalized())
     }
     mmr.commit().expect("commit");
     let result = proof

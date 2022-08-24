@@ -109,7 +109,7 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
     /// 3. generate proof for each positions
     fn gen_proof_for_peak(
         &self,
-        proof: &mut Vec<T>,
+        proof: &mut Vec<(u64, T)>,
         pos_list: Vec<u64>,
         peak_pos: u64,
     ) -> Result<()> {
@@ -120,9 +120,11 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
         // take peak root from store if no positions need to be proof
         if pos_list.is_empty() {
             proof.push(
-                self.batch
-                    .get_elem(peak_pos)?
-                    .ok_or(Error::InconsistentStore)?,
+                (peak_pos,
+                 self.batch
+                 .get_elem(peak_pos)?
+                 .ok_or(Error::InconsistentStore)?,
+                )
             );
             return Ok(());
         }
@@ -164,9 +166,11 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
                 queue.pop_front();
             } else {
                 proof.push(
-                    self.batch
-                        .get_elem(sib_pos)?
-                        .ok_or(Error::InconsistentStore)?,
+                    (sib_pos,
+                     self.batch
+                     .get_elem(sib_pos)?
+                     .ok_or(Error::InconsistentStore)?,
+                     )
                 );
             }
             if parent_pos < peak_pos {
@@ -192,7 +196,7 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
         pos_list.sort_unstable();
         pos_list.dedup();
         let peaks = get_peaks(self.mmr_size);
-        let mut proof: Vec<T> = Vec::new();
+        let mut proof: Vec<(u64, T)> = Vec::new();
         // generate merkle proof for each peaks
         let mut bagging_track = 0;
         for peak_pos in peaks {
@@ -210,10 +214,10 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
             return Err(Error::GenProofForInvalidLeaves);
         }
 
-        if bagging_track > 1 {
-            let rhs_peaks = proof.split_off(proof.len() - bagging_track);
-            proof.push(self.bag_rhs_peaks(rhs_peaks)?.expect("bagging rhs peaks"));
-        }
+        // if bagging_track > 1 {
+        //     let rhs_peaks = proof.split_off(proof.len() - bagging_track).iter().cloned().map(|(_, item)| item).collect();
+        //     proof.push((self.mmr_size, self.bag_rhs_peaks(rhs_peaks)?.expect("bagging rhs peaks")));
+        // }
 
         Ok(MerkleProof::new(self.mmr_size, proof))
     }
@@ -226,12 +230,12 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
 #[derive(Debug)]
 pub struct MerkleProof<T, M> {
     mmr_size: u64,
-    proof: Vec<T>,
+    proof: Vec<(u64, T)>,
     merge: PhantomData<M>,
 }
 
 impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
-    pub fn new(mmr_size: u64, proof: Vec<T>) -> Self {
+    pub fn new(mmr_size: u64, proof: Vec<(u64, T)>) -> Self {
         MerkleProof {
             mmr_size,
             proof,
@@ -243,7 +247,7 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
         self.mmr_size
     }
 
-    pub fn proof_items(&self) -> &[T] {
+    pub fn proof_items(&self) -> &[(u64, T)] {
         &self.proof
     }
 
@@ -267,14 +271,16 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
         if next_height > pos_height {
             let mut peaks_hashes =
                 calculate_peaks_hashes::<_, M, _>(nodes, self.mmr_size, self.proof.iter())?;
-            let peaks_pos = get_peaks(new_mmr_size);
+            let mut peaks_pos = get_peaks(new_mmr_size);
             // reverse touched peaks
             let mut i = 0;
             while peaks_pos[i] < new_pos {
                 i += 1
             }
             peaks_hashes[i..].reverse();
-            calculate_root::<_, M, _>(vec![(new_pos, new_elem)], new_mmr_size, peaks_hashes.iter())
+            peaks_pos[i..].reverse();
+            let peaks: Vec<(u64, T)> = peaks_pos.iter().cloned().zip(peaks_hashes.iter().cloned()).collect();
+            calculate_root::<_, M, _>(vec![(new_pos, new_elem)], new_mmr_size, peaks.iter())
         } else {
             nodes.push((new_pos, new_elem));
             calculate_root::<_, M, _>(nodes, new_mmr_size, self.proof.iter())
@@ -291,7 +297,7 @@ fn calculate_peak_root<
     'a,
     T: 'a + PartialEq + Debug + Clone,
     M: Merge<Item = T>,
-    I: Iterator<Item = &'a T>,
+    I: Iterator<Item = &'a (u64, T)>,
 >(
     nodes: Vec<(u64, T)>,
     peak_pos: u64,
@@ -353,7 +359,7 @@ fn calculate_peak_root<
         } else {
             // this is buggy
             // if queue.front().0 == parent_pos { proof_iter. }
-            proof_iter.next().ok_or(Error::CorruptedProof)?.clone()
+            proof_iter.next().ok_or(Error::CorruptedProof)?.1.clone()
         };
 
         let parent_item = if next_height > height {
@@ -375,7 +381,7 @@ fn calculate_peaks_hashes<
     'a,
     T: 'a + PartialEq + Debug + Clone,
     M: Merge<Item = T>,
-    I: Iterator<Item = &'a T>,
+    I: Iterator<Item = &'a (u64, T)>,
 >(
     mut nodes: Vec<(u64, T)>,
     mmr_size: u64,
@@ -398,7 +404,7 @@ fn calculate_peaks_hashes<
             nodes.remove(0).1
         } else if nodes.is_empty() {
             // if empty, means the next proof is a peak root or rhs bagged root
-            if let Some(peak_root) = proof_iter.next() {
+            if let Some((_, peak_root)) = proof_iter.next() {
                 peak_root.clone()
             } else {
                 // means that either all right peaks are bagged, or proof is corrupted
@@ -417,7 +423,7 @@ fn calculate_peaks_hashes<
     }
 
     // check rhs peaks
-    if let Some(rhs_peaks_hashes) = proof_iter.next() {
+    if let Some((_, rhs_peaks_hashes)) = proof_iter.next() {
         peaks_hashes.push(rhs_peaks_hashes.clone());
     }
     // ensure nothing left in proof_iter
@@ -448,7 +454,7 @@ fn calculate_root<
     'a,
     T: 'a + PartialEq + Debug + Clone,
     M: Merge<Item = T>,
-    I: Iterator<Item = &'a T>,
+    I: Iterator<Item = &'a (u64, T)>,
 >(
     nodes: Vec<(u64, T)>,
     mmr_size: u64,
