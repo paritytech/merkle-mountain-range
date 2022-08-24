@@ -1,3 +1,4 @@
+use core::ops::Shl;
 use super::{MergeNumberHash, NumberHash};
 use crate::{helper::get_peaks, leaf_index_to_mmr_size, util::MemStore, Error, MMRStore, MMR};
 use faster_hex::hex_string;
@@ -294,6 +295,42 @@ prop_compose! {
                 (elem in 0..count)
                 -> (u32, u32) {
                     (count, elem)
+    }
+}
+
+fn nodes_subset(subset_index: u16, position_count: u8) -> Vec<u64> {
+    let mut positions = vec![];
+
+    for index in 0..position_count {
+            if (1 << index) & subset_index != 0 {
+                positions.push(index as u64)
+            }
+    }
+
+    positions
+}
+
+const LEAVES_COUNT: u32 = 8;
+proptest! {
+    #[test]
+    fn test_mmr_generic_proof_proptest(
+        positions in (1u16..1u16.shl(leaf_index_to_mmr_size(LEAVES_COUNT as u64 - 1) as u8))
+            .prop_map(|subset_index| nodes_subset(subset_index, leaf_index_to_mmr_size(LEAVES_COUNT as u64 - 1) as u8))
+    ) {
+        test_invalid_proof_verification(LEAVES_COUNT, positions, vec![0], None, None)
+    }
+
+}
+
+const MAX_POS: u8 = 11;
+proptest! {
+    // for 7 leaves, have 11 nodes, so 2^11 possible subsets of nodes to generate a proof for
+    #[test]
+    fn test_7_leaf_mmr_generic_proof_proptest(
+        positions in (1u16..1u16.shl(MAX_POS)).prop_map(|subset_index| nodes_subset(subset_index, MAX_POS))
+    ) {
+        let leaves_count = 7;
+        test_invalid_proof_verification(leaves_count, positions, vec![0], None, None)
     }
 }
 
