@@ -404,13 +404,6 @@ fn calculate_peak_root<
             println!("popping sibling {:?} from back", sib_pos);
             queue.pop_back().map(|(_, item, _)| item).unwrap()
         }
-        else if Some(&sib_pos) == queue.get(1).map(|(pos, _, _)| pos) {
-            println!("popping sibling {:?} from back", sib_pos);
-            let front = queue.pop_front().unwrap();
-            let second_front = queue.pop_front().map(|(_, item, _)| item).unwrap();
-            queue.push_front(front);
-            second_front
-        }
         // handle special if next queue item is descendant of sibling
         else if height > 0
             && queue.front().is_some()
@@ -437,7 +430,7 @@ fn calculate_peak_root<
         if parent_pos <= peak_pos {
             let parent = (parent_pos, parent_item.clone(), height + 1);
             if peak_pos == parent_pos
-                || !(queue.front() == Some(&parent) || queue.back() == Some(&parent))
+                || queue.front() != Some(&parent)
                 && !nodes.contains(&(parent_pos, parent_item))
             {
                 queue.push_front(parent)
