@@ -121,7 +121,7 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
         if pos_list.len() == 1 && pos_list == [peak_pos] {
             return Ok(());
         }
-        // take peak root from store if no positions need to be proof
+        // take peak root from store if no positions need to be proven
         if pos_list.is_empty() {
             proof.push(
                 (peak_pos,
