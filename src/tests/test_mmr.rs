@@ -298,7 +298,7 @@ prop_compose! {
     }
 }
 
-fn nodes_subset(subset_index: u16, position_count: u8) -> Vec<u64> {
+fn nodes_subset(subset_index: u32, position_count: u8) -> Vec<u64> {
     let mut positions = vec![];
 
     for index in 0..position_count {
@@ -310,11 +310,14 @@ fn nodes_subset(subset_index: u16, position_count: u8) -> Vec<u64> {
     positions
 }
 
-const LEAVES_COUNT: u32 = 8;
+const LEAVES_COUNT: u32 = 16;
 proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 500, .. ProptestConfig::default()
+    })]
     #[test]
     fn test_mmr_generic_proof_proptest(
-        positions in (1u16..1u16.shl(leaf_index_to_mmr_size(LEAVES_COUNT as u64 - 1) as u8))
+        positions in (1u32..1u32.shl(leaf_index_to_mmr_size(LEAVES_COUNT as u64 - 1) as u8))
             .prop_map(|subset_index| nodes_subset(subset_index, leaf_index_to_mmr_size(LEAVES_COUNT as u64 - 1) as u8))
     ) {
         test_invalid_proof_verification(LEAVES_COUNT, positions, vec![0], None, None)
@@ -327,7 +330,7 @@ proptest! {
     // for 7 leaves, have 11 nodes, so 2^11 possible subsets of nodes to generate a proof for
     #[test]
     fn test_7_leaf_mmr_generic_proof_proptest(
-        positions in (1u16..1u16.shl(MAX_POS)).prop_map(|subset_index| nodes_subset(subset_index, MAX_POS))
+        positions in (1u32..1u32.shl(MAX_POS)).prop_map(|subset_index| nodes_subset(subset_index, MAX_POS))
     ) {
         let leaves_count = 7;
         test_invalid_proof_verification(leaves_count, positions, vec![0], None, None)
