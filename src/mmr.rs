@@ -440,7 +440,7 @@ fn calculate_peak_root<
                 || !(queue.front() == Some(&parent) || queue.back() == Some(&parent))
                 && !nodes.contains(&(parent_pos, parent_item))
             {
-                queue.push_back(parent)
+                queue.push_front(parent)
             };
         } else {
             return Err(Error::CorruptedProof);
