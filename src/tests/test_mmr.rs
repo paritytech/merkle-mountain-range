@@ -310,17 +310,19 @@ fn nodes_subset(subset_index: u128, position_count: u8) -> Vec<u64> {
     positions
 }
 
-const LEAVES_COUNT: u32 = 64;
+const MAX_LEAVES_COUNT: u32 = 64;
 proptest! {
     #![proptest_config(ProptestConfig {
         cases: 500, .. ProptestConfig::default()
     })]
     #[test]
     fn test_mmr_generic_proof_proptest(
-        positions in (1u128..1u128.shl(leaf_index_to_mmr_size(LEAVES_COUNT as u64 - 1) as u8))
-            .prop_map(|subset_index| nodes_subset(subset_index, leaf_index_to_mmr_size(LEAVES_COUNT as u64 - 1) as u8))
+        (leaves_count, mmr_size, subset_index) in (1..=MAX_LEAVES_COUNT)
+            .prop_flat_map(|leaves_count| {let mmr_size = leaf_index_to_mmr_size(leaves_count as u64 - 1);
+                                           (Just(leaves_count), Just(mmr_size), 1u128..1u128.shl(mmr_size as u8))})
     ) {
-        test_invalid_proof_verification(LEAVES_COUNT, positions, vec![0], None, None)
+        let positions = nodes_subset(subset_index, mmr_size as u8);
+        test_invalid_proof_verification(leaves_count, positions, vec![0], None, None)
     }
 
 }
