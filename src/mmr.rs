@@ -6,7 +6,7 @@
 
 use crate::borrow::Cow;
 use crate::collections::VecDeque;
-use crate::helper::{get_peaks, parent_offset, pos_height_in_tree, sibling_offset};
+use crate::helper::{get_peaks, parent_offset, pos_height_in_tree, sibling_offset, is_descendant_pos};
 use crate::mmr_store::{MMRBatch, MMRStore};
 use crate::vec;
 use crate::vec::Vec;
@@ -172,13 +172,12 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
                 // drop sibling
                 println!("dropping sibling {:?}", sib_pos);
                 queue.pop_front();
-            } else if queue_front_pos.is_none() ||
-                queue_front_pos.unwrap() > &sib_pos ||
-                pos_height_in_tree(*queue_front_pos.unwrap()) >= height
+            }
+            else if queue_front_pos.is_none()||
+                !is_descendant_pos(sib_pos, *queue_front_pos.expect("checked queue_front_pos != None"))
                 // only push a sibling into the proof if either of these cases is satisfied:
                 // 1. the queue is empty
                 // 2. the next item in the queue is not the sibling or a child of it
-                // 3. the next item in the queue has greater height than the current item
             {
                 let sibling =
                     (sib_pos,
@@ -405,16 +404,14 @@ fn calculate_peak_root<
             queue.pop_back().map(|(_, item, _)| item).unwrap()
         }
         // handle special if next queue item is descendant of sibling
-        else if height > 0
-            && queue.front().is_some()
-            && (
-                (pos < sib_pos && queue.iter().any(|(n_pos, _, _)| &pos < n_pos && n_pos < &sib_pos))
-                    ||
-                    (sib_pos < pos && queue.iter().any(|(n_pos, _, _)| n_pos < &sib_pos))
-            )
+        else if let Some(&(front_pos, ..)) = queue.front()
         {
+            if height > 0
+            && is_descendant_pos(sib_pos, front_pos) {
+                println!("next item is descendant of sibling - pushing back current item {:?}", item.clone());
                 queue.push_back((pos, item, height));
-            continue;
+                continue;
+            } else {return Err(Error::CorruptedProof)}
         }
         else
         {
