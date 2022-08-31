@@ -244,13 +244,14 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
             return Err(Error::GenProofForInvalidLeaves);
         }
 
-        // if more than one peak, they can be bagged (but *don't* have to)
-        // if bagging_track > 1 {
-        //     println!("original proof: {:?}", proof);
-        //     let rhs_peaks = proof.split_off(proof.len() - bagging_track);
-        //     proof.push(self.bag_rhs_peaks(rhs_peaks)?.expect("bagging rhs peaks"));
-        //     println!("bagged proof: {:?}", proof);
-        // }
+        // starting from the rightmost peak, an unbroken sequence of
+        // peaks that don't have descendants to be proven can be bagged
+        // during the proof construction already since during verification,
+        // they'll only be utilized during the bagging step anyway
+        if bagging_track > 1 {
+            let rhs_peaks = proof.split_off(proof.len() - bagging_track);
+            proof.push((rhs_peaks[0].0, self.bag_rhs_peaks(rhs_peaks.iter().map(|(_pos, item)| item.clone()).collect())?.expect("bagging rhs peaks")));
+        }
 
         proof.sort_by_key(|(pos, _)| *pos);
 

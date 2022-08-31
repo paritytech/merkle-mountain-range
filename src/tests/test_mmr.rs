@@ -282,12 +282,10 @@ fn test_generic_proofs() {
     test_invalid_proof_verification(7, vec![0, 1, 5, 6, 7, 8, 9, 10], vec![0], None, None);
     test_invalid_proof_verification(7, vec![0, 1, 2, 5, 6, 7, 8, 9, 10], vec![0], None, None);
 
-    // not working without handrolled proofs
-    // TODO: fix case where leaves to be proven contain nephews and intermediary nodes:
-    // test_invalid_proof_verification(7, vec![0, 1, 2, 3, 7, 8, 9, 10], vec![0], Some(vec![4]), None);
-    // test_invalid_proof_verification(7, vec![0, 2, 3, 7, 8, 9, 10], vec![0], None, None);
-    // test_invalid_proof_verification(7, vec![0, 3, 7, 8, 9, 10], vec![0], None, None);
-    // test_invalid_proof_verification(7, vec![0, 2, 3, 7, 8, 9, 10], vec![0], None, None);
+    test_invalid_proof_verification(7, vec![0, 1, 2, 3, 7, 8, 9, 10], vec![0], Some(vec![4]), None);
+    test_invalid_proof_verification(7, vec![0, 2, 3, 7, 8, 9, 10], vec![0], None, None);
+    test_invalid_proof_verification(7, vec![0, 3, 7, 8, 9, 10], vec![0], None, None);
+    test_invalid_proof_verification(7, vec![0, 2, 3, 7, 8, 9, 10], vec![0], None, None);
 }
 
 prop_compose! {
