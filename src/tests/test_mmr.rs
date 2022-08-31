@@ -313,18 +313,21 @@ fn nodes_subset(subset_index: u128, position_count: u8) -> Vec<u64> {
 const MAX_LEAVES_COUNT: u32 = 64;
 proptest! {
     #![proptest_config(ProptestConfig {
-        cases: 500, .. ProptestConfig::default()
+        cases: 2000, max_shrink_iters: 2000, .. ProptestConfig::default()
     })]
     #[test]
     fn test_mmr_generic_proof_proptest(
-        (leaves_count, mmr_size, subset_index) in (1..=MAX_LEAVES_COUNT)
+        (leaves_count, (positions, tampered_node_position)) in (1..=MAX_LEAVES_COUNT)
             .prop_flat_map(|leaves_count| {let mmr_size = leaf_index_to_mmr_size(leaves_count as u64 - 1);
-                                           (Just(leaves_count), Just(mmr_size), 1u128..1u128.shl(mmr_size as u8))})
+                                           let subset_index = 1u128..1u128.shl(mmr_size as u8);
+                                           (Just(leaves_count),
+                                            (Just(mmr_size), subset_index).prop_flat_map(|(mmr_size, subset_index)| {
+                                               let positions = nodes_subset(subset_index, mmr_size as u8);
+                                                (Just(positions.clone()), 0..positions.len())
+                                           }))})
     ) {
-        let positions = nodes_subset(subset_index, mmr_size as u8);
-        test_invalid_proof_verification(leaves_count, positions, vec![0], None, None)
+        test_invalid_proof_verification(leaves_count, positions, vec![tampered_node_position], None, None)
     }
-
 }
 
 const MAX_POS: u8 = 11;
