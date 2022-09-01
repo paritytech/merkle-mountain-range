@@ -2,7 +2,12 @@ default: ci
 
 ci: fmt check-no-std clippy test bench-test
 
-test:
+test: test-leaves-only test-node-proofs
+
+test-leaves-only:
+	cargo test --all
+
+test-node-proofs:
 	cargo test --all --all-features
 
 bench-test:
