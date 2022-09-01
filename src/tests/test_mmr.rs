@@ -207,8 +207,6 @@ fn test_invalid_proof_verification(
         positions.push(pos);
     }
     let root = mmr.get_root().unwrap();
-    println!("Root: {:#?}", root);
-    println!("positions = {:#?}", positions);
 
     let entries_to_verify: Vec<(u64, MyItem)> = positions_to_verify
         .iter()
@@ -248,7 +246,6 @@ fn test_invalid_proof_verification(
     } else {
         mmr.gen_proof(positions_to_verify.clone()).unwrap()
     };
-    println!("genuine proof: {:?}", proof);
 
     // if proof items have been tampered with, the proof verification fails
     if let Some(tampered_proof) = tampered_proof {
@@ -268,7 +265,6 @@ fn test_invalid_proof_verification(
         .iter()
         .any(|pos| pos_height_in_tree(*pos) > 0)
     {
-        println!("not node proof");
         assert_eq!(proof_verification, Err(Error::NodeProofsNotSupported));
     } else {
         assert!(proof_verification.unwrap())

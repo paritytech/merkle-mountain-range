@@ -58,14 +58,6 @@ pub fn get_peaks(mmr_size: u64) -> Vec<u64> {
 }
 
 pub fn is_descendant_pos(ancestor_contender: u64, descendant_contender: u64) -> bool {
-    println!(
-        "checking descendant {} for ancestor {}",
-        descendant_contender, ancestor_contender
-    );
-    println!(
-        "lower bound: {}",
-        (ancestor_contender + 1 - sibling_offset(pos_height_in_tree(ancestor_contender)))
-    );
     descendant_contender <= ancestor_contender
         && descendant_contender
             >= (ancestor_contender + 1 - sibling_offset(pos_height_in_tree(ancestor_contender)))

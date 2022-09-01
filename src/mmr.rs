@@ -115,10 +115,6 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
         pos_list: Vec<u64>,
         peak_pos: u64,
     ) -> Result<()> {
-        println!(
-            "continuing proof {:?} for peak {:?} with positions {:?}",
-            proof, peak_pos, pos_list
-        );
         // do nothing if position itself is the peak
         if pos_list.len() == 1 && pos_list == [peak_pos] {
             return Ok(());
@@ -163,15 +159,10 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
                     (pos + sibling_offset, pos + parent_offset(height))
                 }
             };
-            println!(
-                "pos: {:?}, sib_pos: {:?}, parent_pos: {:?}",
-                pos, sib_pos, parent_pos
-            );
 
             let queue_front_pos = queue.front().map(|(pos, _)| pos);
             if Some(&sib_pos) == queue_front_pos {
                 // drop sibling
-                println!("dropping sibling {:?}", sib_pos);
                 queue.pop_front();
             } else if queue_front_pos.is_none()
                 || !is_descendant_pos(
@@ -194,24 +185,11 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
                 if height == 0
                     || !(proof.contains(&sibling)) && pos_list.binary_search(&sib_pos).is_err()
                 {
-                    println!(
-                        "{:?} not already present in proof {:?} - adding",
-                        sibling, proof
-                    );
                     proof.push(sibling);
                 }
-            } else {
-                println!(
-                    "sib_pos {:?} not added to queue {:?} with queue front pos {:?}",
-                    sib_pos, queue, queue_front_pos
-                )
             }
             if parent_pos < peak_pos {
                 // save pos to tree buf
-                println!(
-                    "pushing parent_pos {:?} back to queue {:?}",
-                    parent_pos, queue
-                );
                 queue.push_back((parent_pos, height + 1));
             }
         }
@@ -299,9 +277,7 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
     }
 
     pub fn calculate_root(&self, leaves: Vec<(u64, T)>) -> Result<T> {
-        let root = calculate_root::<_, M, _>(leaves, self.mmr_size, self.proof.iter());
-        println!("calculated root: {:?}", root);
-        root
+        calculate_root::<_, M, _>(leaves, self.mmr_size, self.proof.iter())
     }
 
     /// from merkle proof of leaf n to calculate merkle root of n + 1 leaves.
@@ -372,9 +348,6 @@ fn calculate_peak_root<
 
     // calculate tree root from each items
     while let Some((pos, item, height)) = queue.pop_front() {
-        println!("\nverifying item {:?}", item);
-        println!("pos: {:?} peak_pos: {:?}", pos, peak_pos);
-        println!("remaining queue {:?}", queue);
         if pos == peak_pos {
             if queue.is_empty() {
                 // return root once queue is consumed
@@ -393,7 +366,6 @@ fn calculate_peak_root<
                 // return root if remaining queue consists only of duplicate root entries
                 return Ok(item);
             }
-            println!("pushing back {:?}", item);
             // if queue not empty, push peak back to the end
             queue.push_back((pos, item, height));
             continue;
@@ -410,20 +382,14 @@ fn calculate_peak_root<
                 (pos + sibling_offset, pos + parent_offset(height))
             }
         };
-        println!("sibling pos: {:?}, parent pos: {:?}", sib_pos, parent_pos);
         let sibling_item = if Some(&sib_pos) == queue.front().map(|(pos, _, _)| pos) {
             queue.pop_front().map(|(_, item, _)| item).unwrap()
         } else if Some(&sib_pos) == queue.back().map(|(pos, _, _)| pos) {
-            println!("popping sibling {:?} from back", sib_pos);
             queue.pop_back().map(|(_, item, _)| item).unwrap()
         }
         // handle special if next queue item is descendant of sibling
         else if let Some(&(front_pos, ..)) = queue.front() {
             if height > 0 && is_descendant_pos(sib_pos, front_pos) {
-                println!(
-                    "next item is descendant of sibling - pushing back current item {:?}",
-                    item.clone()
-                );
                 queue.push_back((pos, item, height));
                 continue;
             } else {
@@ -474,7 +440,6 @@ fn calculate_peaks_hashes<
 
     // ensure nodes are sorted and unique
     nodes.sort_by_key(|(pos, _)| *pos);
-    println!("nodes in the proof: {:?}", nodes);
     nodes.dedup_by(|a, b| a.0 == b.0);
     let peaks = get_peaks(mmr_size);
 
@@ -496,7 +461,6 @@ fn calculate_peaks_hashes<
         } else {
             calculate_peak_root::<_, M>(nodes, peak_pos)?
         };
-        println!("calculated peak: {:?}", peak_root);
         peaks_hashes.push(peak_root.clone());
     }
 
