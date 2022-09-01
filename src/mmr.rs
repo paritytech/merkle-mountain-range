@@ -181,15 +181,9 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
                      self.batch
                      .get_elem(sib_pos.clone())?
                      .ok_or(Error::InconsistentStore)?);
-                // only push sibling if it's not already a proof item,
+
+                // only push sibling if it's not already a proof item or to be proven,
                 // which can be the case if both a child and its parent are to be proven
-                // if !(proof.last() == Some(&sibling)) {proof.push(sibling)};
-                // proof.push(sibling);
-
-                // only push sibling if it's not already a proof item, a position to be proven,
-                // or its children don't already demand it
-                // (or if one of its descendants is not to be proven next)
-
                 if  height == 0
                     || !(proof.contains(&sibling))
                     && pos_list.binary_search(&sib_pos).is_err()
