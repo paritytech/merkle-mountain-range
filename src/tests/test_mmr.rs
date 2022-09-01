@@ -1,6 +1,6 @@
 use core::ops::Shl;
 use super::{MergeNumberHash, NumberHash};
-use crate::{helper::get_peaks, leaf_index_to_mmr_size, util::MemStore, Error, MMRStore, MMR};
+use crate::{helper::{get_peaks, pos_height_in_tree}, leaf_index_to_mmr_size, util::MemStore, Error, MMRStore, MMR};
 use faster_hex::hex_string;
 use proptest::prelude::*;
 use rand::{seq::SliceRandom, thread_rng};
@@ -241,7 +241,7 @@ fn test_invalid_proof_verification(
                 .collect(),
         )
     } else {
-        mmr.gen_proof(positions_to_verify).unwrap()
+        mmr.gen_proof(positions_to_verify.clone()).unwrap()
     };
     println!("genuine proof: {:?}", proof);
 
@@ -256,11 +256,19 @@ fn test_invalid_proof_verification(
     let tampered_entries_result = proof.verify(root.clone(), tampered_entries_to_verify.clone());
     assert!(tampered_entries_result.is_err() || !tampered_entries_result.unwrap());
 
+    let proof_verification = proof.verify(root, entries_to_verify);
+    // if "nodeproofs" is not enabled and any nodes are not leaves, the proof is rejected
+    #[cfg(not(feature = "nodeproofs"))]
+    if positions_to_verify.iter().any(|pos| pos_height_in_tree(*pos) > 0) {
+        println!("not node proof");
+       assert_eq!(proof_verification, Err(Error::NodeProofsNotSupported));
+    } else {assert!(proof_verification.unwrap())}
+
+    #[cfg(feature = "nodeproofs")]
     // verification of the correct nodes passes
-    assert!(proof.verify(root, entries_to_verify).unwrap());
+    assert!(proof_verification.unwrap())
 }
 
-#[cfg(feature = "nodeproofs")]
 #[test]
 fn test_generic_proofs() {
     // working with proof generation

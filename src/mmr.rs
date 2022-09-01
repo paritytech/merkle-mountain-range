@@ -133,14 +133,11 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
             return Ok(());
         }
 
-        #[cfg(feature = "nodeproofs")]
         let mut queue: VecDeque<_> = pos_list
             .clone()
             .into_iter()
             .map(|pos| (pos, pos_height_in_tree(pos)))
             .collect();
-        #[cfg(not(feature = "nodeproofs"))]
-        let mut queue: VecDeque<_> = pos_list.clone().into_iter().map(|pos| (pos, 0u32)).collect();
 
         // Generate sub-tree merkle proof for positions
         while let Some((pos, height)) = queue.pop_front() {
@@ -326,6 +323,11 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
     }
 
     pub fn verify(&self, root: T, nodes: Vec<(u64, T)>) -> Result<bool> {
+        #[cfg(not(feature = "nodeproofs"))]
+        if nodes.iter().any(|(pos, _)| pos_height_in_tree(*pos) > 0) {
+            return Err(Error::NodeProofsNotSupported);
+        }
+
         self.calculate_root(nodes)
             .map(|calculated_root| calculated_root == root)
     }
@@ -344,16 +346,9 @@ fn calculate_peak_root<
     debug_assert!(!nodes.is_empty(), "can't be empty");
     // (position, hash, height)
 
-    #[cfg(feature = "nodeproofs")]
     let mut queue: VecDeque<_> = nodes.clone()
         .into_iter()
         .map(|(pos, item)| (pos, item, pos_height_in_tree(pos)))
-        .collect();
-
-    #[cfg(not(feature = "nodeproofs"))]
-    let mut queue: VecDeque<_> = nodes.clone()
-        .into_iter()
-        .map(|(pos, item)| (pos, item, 0u32))
         .collect();
 
     // calculate tree root from each items
