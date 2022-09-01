@@ -10,6 +10,7 @@ repository = "https://github.com/nervosnetwork/merkle-mountain-range"
 [features]
 default = ["std"]
 std = []
+# enable for proofs that include non-leafs, such as mmr ancestry proofs
 nodeproofs = []
 
 [dependencies]
