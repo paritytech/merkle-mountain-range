@@ -6,7 +6,9 @@
 
 use crate::borrow::Cow;
 use crate::collections::VecDeque;
-use crate::helper::{get_peaks, parent_offset, pos_height_in_tree, sibling_offset, is_descendant_pos};
+use crate::helper::{
+    get_peaks, is_descendant_pos, parent_offset, pos_height_in_tree, sibling_offset,
+};
 use crate::mmr_store::{MMRBatch, MMRStore};
 use crate::vec;
 use crate::vec::Vec;
@@ -123,13 +125,12 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
         }
         // take peak root from store if no positions need to be proven
         if pos_list.is_empty() {
-            proof.push(
-                (peak_pos,
-                 self.batch
-                 .get_elem(peak_pos)?
-                 .ok_or(Error::InconsistentStore)?,
-                )
-            );
+            proof.push((
+                peak_pos,
+                self.batch
+                    .get_elem(peak_pos)?
+                    .ok_or(Error::InconsistentStore)?,
+            ));
             return Ok(());
         }
 
@@ -162,40 +163,55 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
                     (pos + sibling_offset, pos + parent_offset(height))
                 }
             };
-            println!("pos: {:?}, sib_pos: {:?}, parent_pos: {:?}", pos, sib_pos, parent_pos);
+            println!(
+                "pos: {:?}, sib_pos: {:?}, parent_pos: {:?}",
+                pos, sib_pos, parent_pos
+            );
 
             let queue_front_pos = queue.front().map(|(pos, _)| pos);
             if Some(&sib_pos) == queue_front_pos {
                 // drop sibling
                 println!("dropping sibling {:?}", sib_pos);
                 queue.pop_front();
-            }
-            else if queue_front_pos.is_none()||
-                !is_descendant_pos(sib_pos, *queue_front_pos.expect("checked queue_front_pos != None"))
-                // only push a sibling into the proof if either of these cases is satisfied:
-                // 1. the queue is empty
-                // 2. the next item in the queue is not the sibling or a child of it
+            } else if queue_front_pos.is_none()
+                || !is_descendant_pos(
+                    sib_pos,
+                    *queue_front_pos.expect("checked queue_front_pos != None"),
+                )
+            // only push a sibling into the proof if either of these cases is satisfied:
+            // 1. the queue is empty
+            // 2. the next item in the queue is not the sibling or a child of it
             {
-                let sibling =
-                    (sib_pos,
-                     self.batch
-                     .get_elem(sib_pos.clone())?
-                     .ok_or(Error::InconsistentStore)?);
+                let sibling = (
+                    sib_pos,
+                    self.batch
+                        .get_elem(sib_pos.clone())?
+                        .ok_or(Error::InconsistentStore)?,
+                );
 
                 // only push sibling if it's not already a proof item or to be proven,
                 // which can be the case if both a child and its parent are to be proven
-                if  height == 0
-                    || !(proof.contains(&sibling))
-                    && pos_list.binary_search(&sib_pos).is_err()
-                    {
-                        println!("{:?} not already present in proof {:?} - adding", sibling, proof);
-                        proof.push(sibling);
-                    }
-
-            } else {println!("sib_pos {:?} not added to queue {:?} with queue front pos {:?}", sib_pos, queue, queue_front_pos)}
+                if height == 0
+                    || !(proof.contains(&sibling)) && pos_list.binary_search(&sib_pos).is_err()
+                {
+                    println!(
+                        "{:?} not already present in proof {:?} - adding",
+                        sibling, proof
+                    );
+                    proof.push(sibling);
+                }
+            } else {
+                println!(
+                    "sib_pos {:?} not added to queue {:?} with queue front pos {:?}",
+                    sib_pos, queue, queue_front_pos
+                )
+            }
             if parent_pos < peak_pos {
                 // save pos to tree buf
-                println!("pushing parent_pos {:?} back to queue {:?}", parent_pos, queue);
+                println!(
+                    "pushing parent_pos {:?} back to queue {:?}",
+                    parent_pos, queue
+                );
                 queue.push_back((parent_pos, height + 1));
             }
         }
@@ -241,7 +257,11 @@ impl<'a, T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T
         // they'll only be utilized during the bagging step anyway
         if bagging_track > 1 {
             let rhs_peaks = proof.split_off(proof.len() - bagging_track);
-            proof.push((rhs_peaks[0].0, self.bag_rhs_peaks(rhs_peaks.iter().map(|(_pos, item)| item.clone()).collect())?.expect("bagging rhs peaks")));
+            proof.push((
+                rhs_peaks[0].0,
+                self.bag_rhs_peaks(rhs_peaks.iter().map(|(_pos, item)| item.clone()).collect())?
+                    .expect("bagging rhs peaks"),
+            ));
         }
 
         proof.sort_by_key(|(pos, _)| *pos);
@@ -308,7 +328,11 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
             }
             peaks_hashes[i..].reverse();
             peaks_pos[i..].reverse();
-            let peaks: Vec<(u64, T)> = peaks_pos.iter().cloned().zip(peaks_hashes.iter().cloned()).collect();
+            let peaks: Vec<(u64, T)> = peaks_pos
+                .iter()
+                .cloned()
+                .zip(peaks_hashes.iter().cloned())
+                .collect();
             calculate_root::<_, M, _>(vec![(new_pos, new_elem)], new_mmr_size, peaks.iter())
         } else {
             nodes.push((new_pos, new_elem));
@@ -340,7 +364,8 @@ fn calculate_peak_root<
     debug_assert!(!nodes.is_empty(), "can't be empty");
     // (position, hash, height)
 
-    let mut queue: VecDeque<_> = nodes.clone()
+    let mut queue: VecDeque<_> = nodes
+        .clone()
         .into_iter()
         .map(|(pos, item)| (pos, item, pos_height_in_tree(pos)))
         .collect();
@@ -388,24 +413,24 @@ fn calculate_peak_root<
         println!("sibling pos: {:?}, parent pos: {:?}", sib_pos, parent_pos);
         let sibling_item = if Some(&sib_pos) == queue.front().map(|(pos, _, _)| pos) {
             queue.pop_front().map(|(_, item, _)| item).unwrap()
-        }
-        else if Some(&sib_pos) == queue.back().map(|(pos, _, _)| pos) {
+        } else if Some(&sib_pos) == queue.back().map(|(pos, _, _)| pos) {
             println!("popping sibling {:?} from back", sib_pos);
             queue.pop_back().map(|(_, item, _)| item).unwrap()
         }
         // handle special if next queue item is descendant of sibling
-        else if let Some(&(front_pos, ..)) = queue.front()
-        {
-            if height > 0
-            && is_descendant_pos(sib_pos, front_pos) {
-                println!("next item is descendant of sibling - pushing back current item {:?}", item.clone());
+        else if let Some(&(front_pos, ..)) = queue.front() {
+            if height > 0 && is_descendant_pos(sib_pos, front_pos) {
+                println!(
+                    "next item is descendant of sibling - pushing back current item {:?}",
+                    item.clone()
+                );
                 queue.push_back((pos, item, height));
                 continue;
-            } else {return Err(Error::CorruptedProof)}
-        }
-        else
-        {
-            return Err(Error::CorruptedProof)
+            } else {
+                return Err(Error::CorruptedProof);
+            }
+        } else {
+            return Err(Error::CorruptedProof);
         };
 
         let parent_item = if next_height > height {
@@ -417,8 +442,7 @@ fn calculate_peak_root<
         if parent_pos <= peak_pos {
             let parent = (parent_pos, parent_item.clone(), height + 1);
             if peak_pos == parent_pos
-                || queue.front() != Some(&parent)
-                && !nodes.contains(&(parent_pos, parent_item))
+                || queue.front() != Some(&parent) && !nodes.contains(&(parent_pos, parent_item))
             {
                 queue.push_front(parent)
             };
@@ -465,9 +489,9 @@ fn calculate_peaks_hashes<
             // if let Some((_, peak_root)) = proof_iter.next() {
             //     peak_root.clone()
             // } else {
-                // means that either all right peaks are bagged, or proof is corrupted
-                // so we break loop and check no items left
-                break;
+            // means that either all right peaks are bagged, or proof is corrupted
+            // so we break loop and check no items left
+            break;
             // }
         } else {
             calculate_peak_root::<_, M>(nodes, peak_pos)?

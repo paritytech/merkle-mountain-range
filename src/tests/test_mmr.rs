@@ -1,6 +1,11 @@
-use core::ops::Shl;
 use super::{MergeNumberHash, NumberHash};
-use crate::{helper::{get_peaks, pos_height_in_tree}, leaf_index_to_mmr_size, util::MemStore, Error, MMRStore, MMR};
+use crate::{
+    helper::{get_peaks, pos_height_in_tree},
+    leaf_index_to_mmr_size,
+    util::MemStore,
+    Error, MMRStore, MMR,
+};
+use core::ops::Shl;
 use faster_hex::hex_string;
 use proptest::prelude::*;
 use rand::{seq::SliceRandom, thread_rng};
@@ -259,10 +264,15 @@ fn test_invalid_proof_verification(
     let proof_verification = proof.verify(root, entries_to_verify);
     // if "nodeproofs" is not enabled and any nodes are not leaves, the proof is rejected
     #[cfg(not(feature = "nodeproofs"))]
-    if positions_to_verify.iter().any(|pos| pos_height_in_tree(*pos) > 0) {
+    if positions_to_verify
+        .iter()
+        .any(|pos| pos_height_in_tree(*pos) > 0)
+    {
         println!("not node proof");
-       assert_eq!(proof_verification, Err(Error::NodeProofsNotSupported));
-    } else {assert!(proof_verification.unwrap())}
+        assert_eq!(proof_verification, Err(Error::NodeProofsNotSupported));
+    } else {
+        assert!(proof_verification.unwrap())
+    }
 
     #[cfg(feature = "nodeproofs")]
     // verification of the correct nodes passes
@@ -290,7 +300,13 @@ fn test_generic_proofs() {
     test_invalid_proof_verification(7, vec![0, 1, 5, 6, 7, 8, 9, 10], vec![0], None, None);
     test_invalid_proof_verification(7, vec![0, 1, 2, 5, 6, 7, 8, 9, 10], vec![0], None, None);
 
-    test_invalid_proof_verification(7, vec![0, 1, 2, 3, 7, 8, 9, 10], vec![0], Some(vec![4]), None);
+    test_invalid_proof_verification(
+        7,
+        vec![0, 1, 2, 3, 7, 8, 9, 10],
+        vec![0],
+        Some(vec![4]),
+        None,
+    );
     test_invalid_proof_verification(7, vec![0, 2, 3, 7, 8, 9, 10], vec![0], None, None);
     test_invalid_proof_verification(7, vec![0, 3, 7, 8, 9, 10], vec![0], None, None);
     test_invalid_proof_verification(7, vec![0, 2, 3, 7, 8, 9, 10], vec![0], None, None);
@@ -308,9 +324,9 @@ fn nodes_subset(subset_index: u128, position_count: u8) -> Vec<u64> {
     let mut positions = vec![];
 
     for index in 0..position_count {
-            if (1 << index) & subset_index != 0 {
-                positions.push(index as u64)
-            }
+        if (1 << index) & subset_index != 0 {
+            positions.push(index as u64)
+        }
     }
 
     positions
