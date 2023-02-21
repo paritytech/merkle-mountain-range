@@ -9,7 +9,7 @@ use crate::collections::VecDeque;
 use crate::helper::{
     get_peak_map, get_peaks, is_descendant_pos, parent_offset, pos_height_in_tree, sibling_offset,
 };
-use crate::mmr_store::{MMRBatch, MMRStore};
+use crate::mmr_store::{MMRBatch, MMRStoreReadOps, MMRStoreWriteOps};
 use crate::vec;
 use crate::vec::Vec;
 use crate::{Error, Merge, Result};
@@ -23,7 +23,7 @@ pub struct MMR<T, M, S> {
     merge: PhantomData<M>,
 }
 
-impl<T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T, M, S> {
+impl<T, M, S> MMR<T, M, S> {
     pub fn new(mmr_size: u64, store: S) -> Self {
         MMR {
             mmr_size,
@@ -31,7 +31,9 @@ impl<T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T, M,
             merge: PhantomData,
         }
     }
+}
 
+impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, S> {
     // find internal MMR elem, the pos must exists, otherwise a error will return
     fn find_elem<'b>(&self, pos: u64, hashes: &'b [T]) -> Result<Cow<'b, T>> {
         let pos_offset = pos.checked_sub(self.mmr_size);
@@ -341,7 +343,9 @@ impl<T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T, M,
             proof: MerkleProof::new(self.mmr_size, proof),
         })
     }
+}
 
+impl<T, M, S: MMRStoreWriteOps<T>> MMR<T, M, S> {
     pub fn commit(self) -> Result<()> {
         self.batch.commit()
     }
@@ -394,7 +398,7 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> AncestryProof<T, M> {
     }
 }
 
-impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
+impl<T: Clone + PartialEq, M: Merge<Item = T>> MerkleProof<T, M> {
     pub fn new(mmr_size: u64, proof: Vec<(u64, T)>) -> Self {
         MerkleProof {
             mmr_size,
@@ -458,14 +462,15 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
         }
 
         let calculated_root = self.calculate_root(nodes)?;
+        Ok(calculated_root == root)
     }
 }
 
 fn calculate_peak_root<
     'a,
-    T: 'a + PartialEq + Debug + Clone,
+    T: 'a + PartialEq + Clone,
     M: Merge<Item = T>,
-    // I: Iterator<Item = &'a (u64, T)>,
+    // I: Iterator<Item = &'a T>
 >(
     nodes: Vec<(u64, T)>,
     peak_pos: u64,
@@ -555,7 +560,7 @@ fn calculate_peak_root<
 
 fn calculate_peaks_hashes<
     'a,
-    T: 'a + PartialEq + Debug + Clone,
+    T: 'a + PartialEq + Clone,
     M: Merge<Item = T>,
     I: Iterator<Item = &'a (u64, T)>,
 >(
@@ -614,9 +619,7 @@ fn calculate_peaks_hashes<
     Ok(peaks_hashes)
 }
 
-pub fn bagging_peaks_hashes<'a, T: 'a + PartialEq + Debug + Clone, M: Merge<Item = T>>(
-    mut peaks_hashes: Vec<T>,
-) -> Result<T> {
+pub fn bagging_peaks_hashes<T, M: Merge<Item = T>>(mut peaks_hashes: Vec<T>) -> Result<T> {
     // bagging peaks
     // bagging from right to left via hash(right, left).
     while peaks_hashes.len() > 1 {
@@ -633,7 +636,7 @@ pub fn bagging_peaks_hashes<'a, T: 'a + PartialEq + Debug + Clone, M: Merge<Item
 /// 3. bagging peaks
 fn calculate_root<
     'a,
-    T: 'a + PartialEq + Debug + Clone,
+    T: 'a + PartialEq + Clone,
     M: Merge<Item = T>,
     I: Iterator<Item = &'a (u64, T)>,
 >(
