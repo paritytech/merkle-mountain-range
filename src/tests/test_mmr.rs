@@ -1,6 +1,9 @@
 use super::{MergeNumberHash, NumberHash};
 use crate::{
-    helper::pos_height_in_tree, leaf_index_to_mmr_size, util::MemStore, Error, MMRStoreReadOps, MMR,
+    helper::pos_height_in_tree,
+    leaf_index_to_mmr_size,
+    util::{MemMMR, MemStore},
+    Error,
 };
 use core::ops::Shl;
 use faster_hex::hex_string;
@@ -9,7 +12,7 @@ use rand::{seq::SliceRandom, thread_rng};
 
 fn test_mmr(count: u32, proof_elem: Vec<u32>) {
     let store = MemStore::default();
-    let mut mmr = MMR::<_, MergeNumberHash, _>::new(0, &store);
+    let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, &store);
     let positions: Vec<u64> = (0u32..count)
         .map(|i| mmr.push(NumberHash::from(i)).unwrap())
         .collect();
@@ -37,7 +40,7 @@ fn test_mmr(count: u32, proof_elem: Vec<u32>) {
 
 fn test_gen_new_root_from_proof(count: u32) {
     let store = MemStore::default();
-    let mut mmr = MMR::<_, MergeNumberHash, _>::new(0, &store);
+    let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, &store);
     let positions: Vec<u64> = (0u32..count)
         .map(|i| mmr.push(NumberHash::from(i)).unwrap())
         .collect();
@@ -62,7 +65,7 @@ fn test_gen_new_root_from_proof(count: u32) {
 #[test]
 fn test_mmr_root() {
     let store = MemStore::default();
-    let mut mmr = MMR::<_, MergeNumberHash, _>::new(0, &store);
+    let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, &store);
     (0u32..11).for_each(|i| {
         mmr.push(NumberHash::from(i)).unwrap();
     });
@@ -77,7 +80,7 @@ fn test_mmr_root() {
 #[test]
 fn test_empty_mmr_root() {
     let store = MemStore::<NumberHash>::default();
-    let mmr = MMR::<_, MergeNumberHash, _>::new(0, &store);
+    let mmr = MemMMR::<_, MergeNumberHash>::new(0, &store);
     assert_eq!(Err(Error::GetRootOnEmpty), mmr.get_root());
 }
 
@@ -189,7 +192,8 @@ fn test_invalid_proof_verification(
     }
 
     // Let's build a simple MMR with the numbers 0 to 6
-    let mut mmr: MemMMR<MyItem, MyMerge> = MemMMR::default();
+    let store = MemStore::default();
+    let mut mmr = MemMMR::<_, MyMerge>::new(0, &store);
     let mut positions: Vec<u64> = Vec::new();
     for i in 0u32..leaf_count {
         let pos = mmr.push(MyItem::Number(i)).unwrap();
@@ -199,7 +203,7 @@ fn test_invalid_proof_verification(
 
     let entries_to_verify: Vec<(u64, MyItem)> = positions_to_verify
         .iter()
-        .map(|pos| (*pos, mmr.store().get_elem(*pos).unwrap().unwrap()))
+        .map(|pos| (*pos, mmr.batch().get_elem(*pos).unwrap().unwrap()))
         .collect();
 
     let mut tampered_entries_to_verify = entries_to_verify.clone();
@@ -216,7 +220,7 @@ fn test_invalid_proof_verification(
                 mmr.mmr_size(),
                 tampered_proof_positions
                     .iter()
-                    .map(|pos| (*pos, mmr.store().get_elem(*pos).unwrap().unwrap()))
+                    .map(|pos| (*pos, mmr.batch().get_elem(*pos).unwrap().unwrap()))
                     .collect(),
             ))
         } else {
@@ -229,7 +233,7 @@ fn test_invalid_proof_verification(
             mmr.mmr_size(),
             proof_positions
                 .iter()
-                .map(|pos| (*pos, mmr.store().get_elem(*pos).unwrap().unwrap()))
+                .map(|pos| (*pos, mmr.batch().get_elem(*pos).unwrap().unwrap()))
                 .collect(),
         )
     } else {

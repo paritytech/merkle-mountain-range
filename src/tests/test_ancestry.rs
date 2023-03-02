@@ -5,7 +5,7 @@ use crate::util::{MemMMR, MemStore};
 #[test]
 fn test_ancestry() {
     let store = MemStore::default();
-    let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, store);
+    let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, &store);
 
     let mmr_size = 300;
     let mut prev_roots = Vec::new();

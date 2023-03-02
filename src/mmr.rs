@@ -31,6 +31,22 @@ impl<T, M, S> MMR<T, M, S> {
             merge: PhantomData,
         }
     }
+
+    pub fn mmr_size(&self) -> u64 {
+        self.mmr_size
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.mmr_size == 0
+    }
+
+    pub fn batch(&self) -> &MMRBatch<T, S> {
+        &self.batch
+    }
+
+    pub fn store(&self) -> &S {
+        self.batch.store()
+    }
 }
 
 impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, S> {
@@ -42,14 +58,6 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
         }
         let elem = self.batch.get_elem(pos)?.ok_or(Error::InconsistentStore)?;
         Ok(Cow::Owned(elem))
-    }
-
-    pub fn mmr_size(&self) -> u64 {
-        self.mmr_size
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.mmr_size == 0
     }
 
     // push a element and return position
@@ -283,7 +291,7 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
     /// 2. generate membership proof of peaks in root r
     /// 3. calculate r' from peaks(n)
     /// 4. return (mmr root r', peak hashes, membership proof of peaks(n) in r)
-    pub fn gen_prefix_proof(&self, prev_mmr_size: u64) -> Result<AncestryProof<T, M>> {
+    pub fn gen_ancestry_proof(&self, prev_mmr_size: u64) -> Result<AncestryProof<T, M>> {
         let mut pos_list = get_peaks(prev_mmr_size);
         if pos_list.is_empty() {
             return Err(Error::GenProofForInvalidNodes);
@@ -343,7 +351,7 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
 }
 
 impl<T, M, S: MMRStoreWriteOps<T>> MMR<T, M, S> {
-    pub fn commit(self) -> Result<()> {
+    pub fn commit(&mut self) -> Result<()> {
         self.batch.commit()
     }
 }
