@@ -1,6 +1,7 @@
 mod test_accumulate_headers;
 mod test_ancestry;
 mod test_helper;
+mod test_incremental;
 mod test_mmr;
 mod test_sequence;
 
