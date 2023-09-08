@@ -106,7 +106,7 @@ impl<T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T, M,
                 },
                 Err(e) => return Err(e)
             }
-        } else if prev_mmr_size >= self.mmr_size {
+        } else if prev_mmr_size > self.mmr_size {
             return Err(Error::AncestorRootNotPredecessor);
         }
         let peaks: Result<Vec<T>> = get_peaks(prev_mmr_size)
@@ -284,8 +284,8 @@ impl<T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T, M,
     /// 2. generate membership proof of peaks in root r
     /// 3. calculate r' from peaks(n)
     /// 4. return (mmr root r', peak hashes, membership proof of peaks(n) in r)
-    pub fn gen_prefix_proof(&self, old_mmr_size: u64) -> Result<(T, Vec<T>, MerkleProof<T, M>)> {
-        let mut pos_list = get_peaks(old_mmr_size);
+    pub fn gen_prefix_proof(&self, prev_mmr_size: u64) -> Result<(T, Vec<T>, MerkleProof<T, M>)> {
+        let mut pos_list = get_peaks(prev_mmr_size);
         if pos_list.is_empty() {
             return Err(Error::GenProofForInvalidNodes);
         }
@@ -329,7 +329,7 @@ impl<T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T, M,
 
         proof.sort_by_key(|(pos, _)| *pos);
 
-        let (old_peaks, old_root) = self.get_ancestor_peaks_and_root(old_mmr_size)?;
+        let (old_peaks, old_root) = self.get_ancestor_peaks_and_root(prev_mmr_size)?;
 
         Ok((old_root, old_peaks, MerkleProof::new(self.mmr_size, proof)))
     }
@@ -413,27 +413,28 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
             .map(|calculated_root| calculated_root == root)
     }
 
-    pub fn verify_ancestor(&self, root: T, old_root: T, old_mmr_size: u64, old_peaks: Vec<T>) -> Result<bool> {
+    pub fn verify_ancestor(&self, root: T, prev_root: &T, prev_mmr_size: u64, prev_peaks: Vec<T>) -> Result<bool> {
         let current_leaves_count = get_peak_map(self.mmr_size);
-        if current_leaves_count <= old_peaks.len() as u64 {
+        if current_leaves_count <= prev_peaks.len() as u64 {
             return Err(Error::CorruptedProof);
         }
         // Test if previous root is correct.
         let prev_peaks_positions = {
-            let prev_peaks_positions = get_peaks(old_mmr_size);
-            if prev_peaks_positions.len() != old_peaks.len() {
+            let prev_peaks_positions = get_peaks(prev_mmr_size);
+            if prev_peaks_positions.len() != prev_peaks.len() {
                 println!("proof len not equal: {} != {}", prev_peaks_positions.len(), self.proof.len());
                 return Err(Error::CorruptedProof);
             }
             prev_peaks_positions
         };
 
-        let calculated_prev_root = bagging_peaks_hashes::<T, M>(old_peaks.clone())?;
-        if calculated_prev_root != old_root {
+        println!("verification bagging {:?}", prev_peaks);
+        let calculated_prev_root = bagging_peaks_hashes::<T, M>(prev_peaks.clone())?;
+        if calculated_prev_root != *prev_root {
             return Ok(false);
         } else { println!("prev root verified"); }
 
-        let nodes = old_peaks.into_iter().zip(prev_peaks_positions.iter()).map(|(peak, position)| (*position, peak)).collect();
+        let nodes = prev_peaks.into_iter().zip(prev_peaks_positions.iter()).map(|(peak, position)| (*position, peak)).collect();
 
         self.verify(root, nodes)
     }

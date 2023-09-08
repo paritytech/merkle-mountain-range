@@ -80,8 +80,8 @@ impl<T: Clone + Debug + PartialEq, M: Merge<Item = T>> MemMMR<T, M> {
         mmr.gen_proof(pos_list)
     }
 
-    pub fn gen_prefix_proof(&self, old_size: u64) -> Result<(T, Vec<T>, MerkleProof<T, M>)> {
+    pub fn gen_prefix_proof(&self, prev_size: u64) -> Result<(T, Vec<T>, MerkleProof<T, M>)> {
         let mmr = MMR::<T, M, &MemStore<T>>::new(self.mmr_size, &self.store);
-        mmr.gen_prefix_proof(old_size)
+        mmr.gen_prefix_proof(prev_size)
     }
 }
