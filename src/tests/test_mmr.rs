@@ -1,6 +1,6 @@
 use super::{MergeNumberHash, NumberHash};
 use crate::{
-    helper::{get_peaks, pos_height_in_tree},
+    helper::pos_height_in_tree,
     leaf_index_to_mmr_size,
     util::MemStore,
     Error, MMRStore, MMR,
@@ -170,14 +170,6 @@ fn test_invalid_proof_verification(
     enum MyItem {
         Number(u32),
         Merged(Box<MyItem>, Box<MyItem>),
-    }
-
-    fn merged(a: MyItem, b: MyItem) -> MyItem {
-        return MyItem::Merged(Box::new(a), Box::new(b));
-    }
-
-    fn merged_u32(a: u32, b: u32) -> MyItem {
-        return MyItem::Merged(Box::new(MyItem::Number(a)), Box::new(MyItem::Number(b)));
     }
 
     impl Debug for MyItem {
