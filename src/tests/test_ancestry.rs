@@ -7,7 +7,7 @@ fn test_ancestry() {
     let store = MemStore::default();
     let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, store);
 
-    let mmr_size = 90;
+    let mmr_size = 300;
     let mut prev_roots = Vec::new();
     for i in 0..mmr_size {
         mmr.push(NumberHash::from(i)).unwrap();

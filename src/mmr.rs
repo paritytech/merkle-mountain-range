@@ -432,7 +432,7 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
         let calculated_prev_root = bagging_peaks_hashes::<T, M>(prev_peaks.clone())?;
         if calculated_prev_root != *prev_root {
             return Ok(false);
-        } else { println!("prev root verified"); }
+        }
 
         let nodes = prev_peaks.into_iter().zip(prev_peaks_positions.iter()).map(|(peak, position)| (*position, peak)).collect();
 
