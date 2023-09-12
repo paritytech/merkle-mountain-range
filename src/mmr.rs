@@ -438,8 +438,6 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
 
         self.verify(root, nodes)
     }
-            return Err(Error::CorruptedProof);
-        }
 }
 
 fn calculate_peak_root<

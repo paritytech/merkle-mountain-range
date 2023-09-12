@@ -57,6 +57,42 @@ pub fn get_peaks(mmr_size: u64) -> Vec<u64> {
     pos_s
 }
 
+/// Returns the height of the peaks in the mmr, presented by a bitmap.
+/// for example, for a mmr with 11 leaves, the mmr_size is 19, it will return 0b1011.
+/// 0b1011 indicates that the left peaks are at height 0, 1 and 3.
+///           14
+///        /       \
+///      6          13
+///    /   \       /   \
+///   2     5     9     12     17
+///  / \   /  \  / \   /  \   /  \
+/// 0   1 3   4 7   8 10  11 15  16 18
+///
+/// please note that when the mmr_size is invalid, it will return the bitmap of the last valid mmr.
+/// in the below example, the mmr_size is 6, but it's not a valid mmr, it will return 0b11.
+///   2     5
+///  / \   /  \
+/// 0   1 3   4
+pub fn get_peak_map(mmr_size: u64) -> u64 {
+    if mmr_size == 0 {
+        return 0;
+    }
+
+    let mut pos = mmr_size;
+    let mut peak_size = u64::MAX >> pos.leading_zeros();
+    let mut peak_map = 0;
+    while peak_size > 0 {
+        peak_map <<= 1;
+        if pos >= peak_size {
+            pos -= peak_size;
+            peak_map |= 1;
+        }
+        peak_size >>= 1;
+    }
+
+    peak_map
+}
+
 pub fn is_descendant_pos(ancestor_contender: u64, descendant_contender: u64) -> bool {
     descendant_contender <= ancestor_contender
         && descendant_contender
