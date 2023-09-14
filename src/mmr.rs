@@ -422,13 +422,11 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
         let prev_peaks_positions = {
             let prev_peaks_positions = get_peaks(prev_mmr_size);
             if prev_peaks_positions.len() != prev_peaks.len() {
-                println!("proof len not equal: {} != {}", prev_peaks_positions.len(), self.proof.len());
                 return Err(Error::CorruptedProof);
             }
             prev_peaks_positions
         };
 
-        println!("verification bagging {:?}", prev_peaks);
         let calculated_prev_root = bagging_peaks_hashes::<T, M>(prev_peaks.clone())?;
         if calculated_prev_root != *prev_root {
             return Ok(false);
