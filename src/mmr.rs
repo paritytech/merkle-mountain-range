@@ -294,6 +294,7 @@ impl<T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T, M,
             return Ok(AncestryProof {
                 prev_root: self.get_root()?,
                 prev_peaks: Vec::new(),
+                prev_size: self.mmr_size,
                 merkle_proof: MerkleProof::new(self.mmr_size(), Vec::new()),
             });
         }
@@ -339,6 +340,7 @@ impl<T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T, M,
         Ok(AncestryProof {
             prev_root,
             prev_peaks,
+            prev_size: prev_mmr_size,
             merkle_proof: MerkleProof::new(self.mmr_size, proof),
         })
     }
@@ -359,6 +361,7 @@ pub struct MerkleProof<T, M> {
 pub struct AncestryProof<T, M> {
     pub prev_root: T,
     pub prev_peaks: Vec<T>,
+    pub prev_size: u64,
     pub merkle_proof: MerkleProof<T, M>,
 }
 

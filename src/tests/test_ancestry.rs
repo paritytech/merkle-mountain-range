@@ -21,6 +21,7 @@ fn test_ancestry() {
         let AncestryProof {
             prev_root,
             prev_peaks,
+            prev_size,
             merkle_proof,
         } = mmr.gen_ancestry_proof(prev_size).expect("gen proof");
         assert_eq!(prev_roots[i as usize], prev_root);
