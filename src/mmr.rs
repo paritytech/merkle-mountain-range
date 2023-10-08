@@ -102,10 +102,8 @@ impl<T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T, M,
         } else if self.mmr_size == 1 && prev_mmr_size == 1 {
             let singleton = self.batch.get_elem(0)?.ok_or(Error::InconsistentStore);
             match singleton {
-                Ok(singleton) => {
-                    return Ok((vec![singleton.clone()], singleton))
-                },
-                Err(e) => return Err(e)
+                Ok(singleton) => return Ok((vec![singleton.clone()], singleton)),
+                Err(e) => return Err(e),
             }
         } else if prev_mmr_size > self.mmr_size {
             return Err(Error::AncestorRootNotPredecessor);
@@ -120,10 +118,12 @@ impl<T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T, M,
             .collect::<Result<Vec<T>>>();
         match peaks {
             Ok(peaks) => {
-                let root = self.bag_rhs_peaks(peaks.clone())?.ok_or(Error::InconsistentStore)?;
+                let root = self
+                    .bag_rhs_peaks(peaks.clone())?
+                    .ok_or(Error::InconsistentStore)?;
                 return Ok((peaks, root));
-            },
-            Err(e) => Err(e)
+            }
+            Err(e) => Err(e),
         }
     }
 
@@ -432,7 +432,13 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
             .map(|calculated_root| calculated_root == root)
     }
 
-    pub fn verify_ancestor(&self, root: T, prev_root: &T, prev_mmr_size: u64, prev_peaks: Vec<T>) -> Result<bool> {
+    pub fn verify_ancestor(
+        &self,
+        root: T,
+        prev_root: &T,
+        prev_mmr_size: u64,
+        prev_peaks: Vec<T>,
+    ) -> Result<bool> {
         let current_leaves_count = get_peak_map(self.mmr_size);
         if current_leaves_count <= prev_peaks.len() as u64 {
             return Err(Error::CorruptedProof);
@@ -451,7 +457,11 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
             return Ok(false);
         }
 
-        let nodes = prev_peaks.into_iter().zip(prev_peaks_positions.iter()).map(|(peak, position)| (*position, peak)).collect();
+        let nodes = prev_peaks
+            .into_iter()
+            .zip(prev_peaks_positions.iter())
+            .map(|(peak, position)| (*position, peak))
+            .collect();
 
         self.verify(root, nodes)
     }

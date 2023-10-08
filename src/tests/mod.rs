@@ -1,8 +1,8 @@
 mod test_accumulate_headers;
+mod test_ancestry;
 mod test_helper;
 mod test_mmr;
 mod test_sequence;
-mod test_ancestry;
 
 use crate::{Merge, Result};
 use blake2b_rs::{Blake2b, Blake2bBuilder};
