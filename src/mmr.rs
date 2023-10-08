@@ -7,7 +7,8 @@
 use crate::borrow::Cow;
 use crate::collections::VecDeque;
 use crate::helper::{
-    get_peaks, get_peak_map, is_descendant_pos, leaf_index_to_mmr_size, leaf_index_to_pos, parent_offset, pos_height_in_tree, sibling_offset,
+    get_peak_map, get_peaks, is_descendant_pos, leaf_index_to_mmr_size, leaf_index_to_pos,
+    parent_offset, pos_height_in_tree, sibling_offset,
 };
 use crate::mmr_store::{MMRBatch, MMRStore};
 use crate::vec;
@@ -284,13 +285,17 @@ impl<T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T, M,
     /// 2. generate membership proof of peaks in root r
     /// 3. calculate r' from peaks(n)
     /// 4. return (mmr root r', peak hashes, membership proof of peaks(n) in r)
-    pub fn gen_prefix_proof(&self, prev_mmr_size: u64) -> Result<(T, Vec<T>, MerkleProof<T, M>)> {
+    pub fn gen_prefix_proof(&self, prev_mmr_size: u64) -> Result<AncestryProof<T, M>> {
         let mut pos_list = get_peaks(prev_mmr_size);
         if pos_list.is_empty() {
             return Err(Error::GenProofForInvalidNodes);
         }
         if self.mmr_size == 1 && pos_list == [0] {
-            return Ok((self.get_root()?, Vec::new(), MerkleProof::new(self.mmr_size, Vec::new())));
+            return Ok(AncestryProof {
+                prev_root: self.get_root()?,
+                prev_peaks: Vec::new(),
+                merkle_proof: MerkleProof::new(self.mmr_size(), Vec::new()),
+            });
         }
         // ensure positions are sorted and unique
         pos_list.sort_unstable();
@@ -329,9 +334,13 @@ impl<T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T, M,
 
         proof.sort_by_key(|(pos, _)| *pos);
 
-        let (old_peaks, old_root) = self.get_ancestor_peaks_and_root(prev_mmr_size)?;
+        let (prev_peaks, prev_root) = self.get_ancestor_peaks_and_root(prev_mmr_size)?;
 
-        Ok((old_root, old_peaks, MerkleProof::new(self.mmr_size, proof)))
+        Ok(AncestryProof {
+            prev_root,
+            prev_peaks,
+            merkle_proof: MerkleProof::new(self.mmr_size, proof),
+        })
     }
 
     pub fn commit(self) -> Result<()> {
@@ -344,6 +353,13 @@ pub struct MerkleProof<T, M> {
     mmr_size: u64,
     proof: Vec<(u64, T)>,
     merge: PhantomData<M>,
+}
+
+#[derive(Debug)]
+pub struct AncestryProof<T, M> {
+    pub prev_root: T,
+    pub prev_peaks: Vec<T>,
+    pub merkle_proof: MerkleProof<T, M>,
 }
 
 impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
