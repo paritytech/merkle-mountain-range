@@ -7,8 +7,7 @@
 use crate::borrow::Cow;
 use crate::collections::VecDeque;
 use crate::helper::{
-    get_peak_map, get_peaks, is_descendant_pos, leaf_index_to_mmr_size, leaf_index_to_pos,
-    parent_offset, pos_height_in_tree, sibling_offset,
+    get_peak_map, get_peaks, is_descendant_pos, parent_offset, pos_height_in_tree, sibling_offset,
 };
 use crate::mmr_store::{MMRBatch, MMRStore};
 use crate::vec;
@@ -292,10 +291,9 @@ impl<T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T, M,
         }
         if self.mmr_size == 1 && pos_list == [0] {
             return Ok(AncestryProof {
-                prev_root: self.get_root()?,
                 prev_peaks: Vec::new(),
                 prev_size: self.mmr_size,
-                merkle_proof: MerkleProof::new(self.mmr_size(), Vec::new()),
+                proof: MerkleProof::new(self.mmr_size(), Vec::new()),
             });
         }
         // ensure positions are sorted and unique
@@ -335,13 +333,12 @@ impl<T: Clone + PartialEq + Debug, M: Merge<Item = T>, S: MMRStore<T>> MMR<T, M,
 
         proof.sort_by_key(|(pos, _)| *pos);
 
-        let (prev_peaks, prev_root) = self.get_ancestor_peaks_and_root(prev_mmr_size)?;
+        let (prev_peaks, _prev_root) = self.get_ancestor_peaks_and_root(prev_mmr_size)?;
 
         Ok(AncestryProof {
-            prev_root,
             prev_peaks,
             prev_size: prev_mmr_size,
-            merkle_proof: MerkleProof::new(self.mmr_size, proof),
+            proof: MerkleProof::new(self.mmr_size, proof),
         })
     }
 
@@ -359,10 +356,42 @@ pub struct MerkleProof<T, M> {
 
 #[derive(Debug)]
 pub struct AncestryProof<T, M> {
-    pub prev_root: T,
     pub prev_peaks: Vec<T>,
     pub prev_size: u64,
-    pub merkle_proof: MerkleProof<T, M>,
+    pub proof: MerkleProof<T, M>,
+}
+
+impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> AncestryProof<T, M> {
+    // TODO: restrict roots to be T::Node
+    pub fn verify_ancestor(&self, root: T, prev_root: T) -> Result<bool> {
+        let current_leaves_count = get_peak_map(self.proof.mmr_size);
+        if current_leaves_count <= self.prev_peaks.len() as u64 {
+            return Err(Error::CorruptedProof);
+        }
+        // Test if previous root is correct.
+        let prev_peaks_positions = {
+            let prev_peaks_positions = get_peaks(self.prev_size);
+            if prev_peaks_positions.len() != self.prev_peaks.len() {
+                return Err(Error::CorruptedProof);
+            }
+            prev_peaks_positions
+        };
+
+        let calculated_prev_root = bagging_peaks_hashes::<T, M>(self.prev_peaks.clone())?;
+        if calculated_prev_root != prev_root {
+            return Ok(false);
+        }
+
+        let nodes = self
+            .prev_peaks
+            .clone()
+            .into_iter()
+            .zip(prev_peaks_positions.iter())
+            .map(|(peak, position)| (*position, peak))
+            .collect();
+
+        self.proof.verify(root, nodes)
+    }
 }
 
 impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
@@ -430,40 +459,6 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
 
         self.calculate_root(nodes)
             .map(|calculated_root| calculated_root == root)
-    }
-
-    pub fn verify_ancestor(
-        &self,
-        root: T,
-        prev_root: &T,
-        prev_mmr_size: u64,
-        prev_peaks: Vec<T>,
-    ) -> Result<bool> {
-        let current_leaves_count = get_peak_map(self.mmr_size);
-        if current_leaves_count <= prev_peaks.len() as u64 {
-            return Err(Error::CorruptedProof);
-        }
-        // Test if previous root is correct.
-        let prev_peaks_positions = {
-            let prev_peaks_positions = get_peaks(prev_mmr_size);
-            if prev_peaks_positions.len() != prev_peaks.len() {
-                return Err(Error::CorruptedProof);
-            }
-            prev_peaks_positions
-        };
-
-        let calculated_prev_root = bagging_peaks_hashes::<T, M>(prev_peaks.clone())?;
-        if calculated_prev_root != *prev_root {
-            return Ok(false);
-        }
-
-        let nodes = prev_peaks
-            .into_iter()
-            .zip(prev_peaks_positions.iter())
-            .map(|(peak, position)| (*position, peak))
-            .collect();
-
-        self.verify(root, nodes)
     }
 }
 
@@ -620,7 +615,7 @@ fn calculate_peaks_hashes<
     Ok(peaks_hashes)
 }
 
-fn bagging_peaks_hashes<'a, T: 'a + PartialEq + Debug + Clone, M: Merge<Item = T>>(
+pub fn bagging_peaks_hashes<'a, T: 'a + PartialEq + Debug + Clone, M: Merge<Item = T>>(
     mut peaks_hashes: Vec<T>,
 ) -> Result<T> {
     // bagging peaks

@@ -1,6 +1,5 @@
 use super::{MergeNumberHash, NumberHash};
 use crate::leaf_index_to_mmr_size;
-use crate::mmr::AncestryProof;
 use crate::util::{MemMMR, MemStore};
 
 #[test]
@@ -18,15 +17,9 @@ fn test_ancestry() {
     let root = mmr.get_root().expect("get root");
     for i in 0..mmr_size {
         let prev_size = leaf_index_to_mmr_size(i.into());
-        let AncestryProof {
-            prev_root,
-            prev_peaks,
-            prev_size,
-            merkle_proof,
-        } = mmr.gen_ancestry_proof(prev_size).expect("gen proof");
-        assert_eq!(prev_roots[i as usize], prev_root);
-        assert!(merkle_proof
-            .verify_ancestor(root.clone(), &prev_roots[i as usize], prev_size, prev_peaks)
+        let ancestry_proof = mmr.gen_ancestry_proof(prev_size).expect("gen proof");
+        assert!(ancestry_proof
+            .verify_ancestor(root.clone(), prev_roots[i as usize].clone())
             .unwrap());
     }
 }
