@@ -457,8 +457,7 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> MerkleProof<T, M> {
             return Err(Error::NodeProofsNotSupported);
         }
 
-        self.calculate_root(nodes)
-            .map(|calculated_root| calculated_root == root)
+        let calculated_root = self.calculate_root(nodes)?;
     }
 }
 
