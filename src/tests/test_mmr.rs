@@ -25,6 +25,11 @@ fn test_mmr(count: u32, proof_elem: Vec<u32>) {
                 .collect(),
         )
         .expect("gen proof");
+    assert!(proof
+        .proof_items()
+        .iter()
+        .zip(proof.proof_items().iter().skip(1))
+        .all(|((pos_a, _), (pos_b, _))| pos_a < pos_b));
     mmr.commit().expect("commit changes");
     let result = proof
         .verify(

@@ -485,32 +485,12 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> MerkleProof<T, M> {
         }
         // Test if previous root is correct.
         let prev_leaves_count = current_leaves_count - incremental.len() as u64;
-        let prev_peaks_positions = {
-            let prev_index = prev_leaves_count - 1;
-            let prev_mmr_size = leaf_index_to_mmr_size(prev_index);
-            let prev_peaks_positions = get_peaks(prev_mmr_size);
-            if prev_peaks_positions.len() != self.proof.len() {
-                return Err(Error::CorruptedProof);
-            }
-            prev_peaks_positions
-        };
-        let current_peaks_positions = get_peaks(self.mmr_size);
 
-        let mut reverse_index = prev_peaks_positions.len() - 1;
-        for (i, position) in prev_peaks_positions.iter().enumerate() {
-            if *position < current_peaks_positions[i] {
-                reverse_index = i;
-                break;
-            }
-        }
-        let mut prev_peaks: Vec<_> = self
+        let prev_peaks: Vec<_> = self
             .proof_items()
             .iter()
             .map(|(_, item)| item.clone())
             .collect();
-        let mut reverse_peaks = prev_peaks.split_off(reverse_index);
-        reverse_peaks.reverse();
-        prev_peaks.extend(reverse_peaks);
 
         let calculated_prev_root = bagging_peaks_hashes::<T, M>(prev_peaks)?;
         if calculated_prev_root != prev_root {
