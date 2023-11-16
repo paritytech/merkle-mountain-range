@@ -146,7 +146,6 @@ fn test_mmr_3_leaves_merkle_proof() {
     test_mmr(100, vec![3, 5, 13]);
 }
 
-#[ignore]
 #[test]
 fn test_gen_root_from_proof() {
     test_gen_new_root_from_proof(11);
@@ -369,7 +368,6 @@ proptest! {
         test_mmr(count, leaves);
     }
 
-    #[ignore]
     #[test]
     fn test_random_gen_root_with_new_leaf(count in 1u32..500u32) {
         test_gen_new_root_from_proof(count);

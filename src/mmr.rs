@@ -428,7 +428,6 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> MerkleProof<T, M> {
     /// from merkle proof of leaf n to calculate merkle root of n + 1 leaves.
     /// by observe the MMR construction graph we know it is possible.
     /// https://github.com/jjyr/merkle-mountain-range#construct
-    /// this is kinda tricky, but it works, and useful
     pub fn calculate_root_with_new_leaf(
         &self,
         mut nodes: Vec<(u64, T)>,
@@ -436,29 +435,8 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> MerkleProof<T, M> {
         new_elem: T,
         new_mmr_size: u64,
     ) -> Result<T> {
-        let pos_height = pos_height_in_tree(new_pos);
-        let next_height = pos_height_in_tree(new_pos + 1);
-        if next_height > pos_height {
-            let mut peaks_hashes =
-                calculate_peaks_hashes::<_, M, _>(nodes, self.mmr_size, self.proof.iter())?;
-            let mut peaks_pos = get_peaks(new_mmr_size);
-            // reverse touched peaks
-            let mut i = 0;
-            while peaks_pos[i] < new_pos {
-                i += 1
-            }
-            peaks_hashes[i..].reverse();
-            peaks_pos[i..].reverse();
-            let peaks: Vec<(u64, T)> = peaks_pos
-                .iter()
-                .cloned()
-                .zip(peaks_hashes.iter().cloned())
-                .collect();
-            calculate_root::<_, M, _>(vec![(new_pos, new_elem)], new_mmr_size, peaks.iter())
-        } else {
-            nodes.push((new_pos, new_elem));
-            calculate_root::<_, M, _>(nodes, new_mmr_size, self.proof.iter())
-        }
+        nodes.push((new_pos, new_elem));
+        calculate_root::<_, M, _>(nodes, new_mmr_size, self.proof.iter())
     }
 
     pub fn verify(&self, root: T, nodes: Vec<(u64, T)>) -> Result<bool> {
