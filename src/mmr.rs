@@ -16,6 +16,7 @@ use crate::vec::Vec;
 use crate::{Error, Merge, Result};
 use core::fmt::Debug;
 use core::marker::PhantomData;
+use itertools::Itertools;
 
 #[allow(clippy::upper_case_acronyms)]
 pub struct MMR<T, M, S> {
@@ -604,7 +605,7 @@ fn calculate_peaks_hashes<
     M: Merge<Item = T>,
     I: Iterator<Item = &'a (u64, T)>,
 >(
-    mut nodes: Vec<(u64, T)>,
+    nodes: Vec<(u64, T)>,
     mmr_size: u64,
     proof_iter: I,
 ) -> Result<Vec<T>> {
@@ -613,13 +614,14 @@ fn calculate_peaks_hashes<
         return Ok(nodes.into_iter().map(|(_pos, item)| item).collect());
     }
 
-    let mut local_proof_items: Vec<(u64, T)> = proof_iter.cloned().collect();
-
-    nodes.append(&mut local_proof_items);
-
     // ensure nodes are sorted and unique
-    nodes.sort_by_key(|(pos, _)| *pos);
-    nodes.dedup_by(|a, b| a.0 == b.0);
+    let mut nodes = nodes
+        .into_iter()
+        .chain(proof_iter.cloned())
+        .sorted_by_key(|(pos, _)| *pos)
+        .dedup_by(|a, b| a.0 == b.0)
+        .collect();
+
     let peaks = get_peaks(mmr_size);
 
     let mut peaks_hashes: Vec<T> = Vec::with_capacity(peaks.len() + 1);

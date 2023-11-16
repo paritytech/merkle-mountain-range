@@ -15,6 +15,7 @@ nodeproofs = []
 
 [dependencies]
 cfg-if = "1.0"
+itertools = "0.10.5"
 
 [dev-dependencies]
 faster-hex = "0.8.0"
