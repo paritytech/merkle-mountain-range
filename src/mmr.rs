@@ -15,8 +15,10 @@ use crate::vec;
 use crate::vec::Vec;
 use crate::{Error, Merge, Result};
 use core::fmt::Debug;
+use core::iter::TakeWhile;
 use core::marker::PhantomData;
 use itertools::Itertools;
+use std::iter::Peekable;
 
 #[allow(clippy::upper_case_acronyms)]
 pub struct MMR<T, M, S> {
@@ -615,30 +617,29 @@ fn calculate_peaks_hashes<
     }
 
     // ensure nodes are sorted and unique
-    let mut nodes = nodes
+    let nodes: Vec<_> = nodes
         .into_iter()
         .chain(proof_iter.cloned())
         .sorted_by_key(|(pos, _)| *pos)
         .dedup_by(|a, b| a.0 == b.0)
         .collect();
 
+    let mut nodes_iter = nodes.into_iter().peekable();
+
     let peaks = get_peaks(mmr_size);
 
     let mut peaks_hashes: Vec<T> = Vec::with_capacity(peaks.len() + 1);
     for peak_pos in peaks {
-        let mut nodes: Vec<_> = take_while_vec(&mut nodes, |(pos, _)| *pos <= peak_pos);
+        let mut nodes: Vec<(u64, T)> =
+            take_while_iter(&mut nodes_iter, |(pos, _)| *pos <= peak_pos);
         let peak_root = if nodes.len() == 1 && nodes[0].0 == peak_pos {
             // leaf is the peak
             nodes.remove(0).1
         } else if nodes.is_empty() {
             // if empty, means the next proof is a peak root or rhs bagged root
-            // if let Some((_, peak_root)) = proof_iter.next() {
-            //     peak_root.clone()
-            // } else {
             // means that either all right peaks are bagged, or proof is corrupted
             // so we break loop and check no items left
             break;
-            // }
         } else {
             calculate_peak_root::<_, M>(nodes, peak_pos)?
         };
@@ -646,7 +647,7 @@ fn calculate_peaks_hashes<
     }
 
     // ensure nothing left in leaves
-    if !nodes.is_empty() {
+    if nodes_iter.len() != 0 {
         return Err(Error::CorruptedProof);
     }
 
@@ -697,4 +698,21 @@ fn take_while_vec<T, P: Fn(&T) -> bool>(v: &mut Vec<T>, p: P) -> Vec<T> {
         }
     }
     v.drain(..).collect()
+}
+
+fn take_while_iter<T, P: Fn(&T) -> bool, I>(i: &mut Peekable<I>, p: P) -> Vec<T>
+where
+    I: Iterator<Item = T>,
+{
+    let mut vec = Vec::new();
+    while let Some(peeked) = i.peek() {
+        if p(peeked) {
+            if let Some(item) = i.next() {
+                vec.push(item)
+            }
+        } else {
+            break;
+        }
+    }
+    vec
 }
