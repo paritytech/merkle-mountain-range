@@ -351,6 +351,57 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
         Ok(MerkleProof::new(self.mmr_size, proof))
     }
 
+    /// Generate node merkle proof for positions
+    /// 1. sort positions
+    /// 2. push merkle proof to proof by peak from left to right
+    /// 3. push bagged right hand side root
+    pub fn gen_node_proof(&self, mut pos_list: Vec<u64>) -> Result<NodeMerkleProof<T, M>> {
+        if pos_list.is_empty() {
+            return Err(Error::GenProofForInvalidNodes);
+        }
+        if self.mmr_size == 1 && pos_list == [0] {
+            return Ok(NodeMerkleProof::new(self.mmr_size, Vec::new()));
+        }
+        // ensure positions are sorted and unique
+        pos_list.sort_unstable();
+        pos_list.dedup();
+        let peaks = get_peaks(self.mmr_size);
+        let mut proof: Vec<(u64, T)> = Vec::new();
+        // generate merkle proof for each peaks
+        let mut bagging_track = 0;
+        for peak_pos in peaks {
+            let pos_list: Vec<_> = take_while_vec(&mut pos_list, |&pos| pos <= peak_pos);
+            if pos_list.is_empty() {
+                bagging_track += 1;
+            } else {
+                bagging_track = 0;
+            }
+            self.gen_node_proof_for_peak(&mut proof, pos_list, peak_pos)?;
+        }
+
+        // ensure no remain positions
+        if !pos_list.is_empty() {
+            return Err(Error::GenProofForInvalidNodes);
+        }
+
+        // starting from the rightmost peak, an unbroken sequence of
+        // peaks that don't have descendants to be proven can be bagged
+        // during the proof construction already since during verification,
+        // they'll only be utilized during the bagging step anyway
+        if bagging_track > 1 {
+            let rhs_peaks = proof.split_off(proof.len() - bagging_track);
+            proof.push((
+                rhs_peaks[0].0,
+                self.bag_rhs_peaks(rhs_peaks.iter().map(|(_pos, item)| item.clone()).collect())?
+                    .expect("bagging rhs peaks"),
+            ));
+        }
+
+        proof.sort_by_key(|(pos, _)| *pos);
+
+        Ok(NodeMerkleProof::new(self.mmr_size, proof))
+    }
+
     /// Generate proof that prior merkle root r' is an ancestor of current merkle proof r
     /// 1. calculate positions of peaks of old root r' given mmr size n
     /// 2. generate membership proof of peaks in root r
