@@ -92,11 +92,6 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> MerkleProof<T, M> {
     }
 
     pub fn verify(&self, root: T, nodes: Vec<(u64, T)>) -> Result<bool> {
-        #[cfg(not(feature = "nodeproofs"))]
-        if nodes.iter().any(|(pos, _)| pos_height_in_tree(*pos) > 0) {
-            return Err(Error::NodeProofsNotSupported);
-        }
-
         let calculated_root = self.calculate_root(nodes)?;
         Ok(calculated_root == root)
     }

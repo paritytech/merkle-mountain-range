@@ -232,7 +232,7 @@ fn test_invalid_proof_verification(
             assert!(proof.verify(root.clone(), entries_to_verify).unwrap());
             assert!(!proof.verify(root, tampered_entries_to_verify).unwrap());
         }
-        Err(Error::NodeProofsNotSupported) => {
+        Err(Error::GenProofForInvalidLeaves) => {
             // if couldn't generate proof, then it contained a non-leaf
             assert!(positions_to_verify
                 .iter()

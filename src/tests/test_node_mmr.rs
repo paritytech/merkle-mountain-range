@@ -1,6 +1,5 @@
 use super::{MergeNumberHash, NumberHash};
 use crate::{
-    helper::pos_height_in_tree,
     leaf_index_to_mmr_size,
     util::{MemMMR, MemStore},
     Error,
@@ -256,20 +255,8 @@ fn test_invalid_proof_verification(
     assert!(tampered_entries_result.is_err() || !tampered_entries_result.unwrap());
 
     let proof_verification = proof.verify(root, entries_to_verify);
-    // if "nodeproofs" is not enabled and any nodes are not leaves, the proof is rejected
-    #[cfg(not(feature = "nodeproofs"))]
-    if positions_to_verify
-        .iter()
-        .any(|pos| pos_height_in_tree(*pos) > 0)
-    {
-        assert_eq!(proof_verification, Err(Error::NodeProofsNotSupported));
-    } else {
-        assert!(proof_verification.unwrap())
-    }
-
-    #[cfg(feature = "nodeproofs")]
     // verification of the correct nodes passes
-    assert!(proof_verification.unwrap())
+    assert!(proof_verification.unwrap());
 }
 
 #[test]

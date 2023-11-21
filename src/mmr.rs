@@ -179,7 +179,7 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
                 if queue.is_empty() {
                     break;
                 } else {
-                    return Err(Error::NodeProofsNotSupported);
+                    return Err(Error::CorruptedProof);
                 }
             }
 
@@ -313,13 +313,13 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
     /// 3. push bagged right hand side root
     pub fn gen_proof(&self, mut pos_list: Vec<u64>) -> Result<MerkleProof<T, M>> {
         if pos_list.is_empty() {
-            return Err(Error::GenProofForInvalidNodes);
+            return Err(Error::GenProofForInvalidLeaves);
         }
         if self.mmr_size == 1 && pos_list == [0] {
             return Ok(MerkleProof::new(self.mmr_size, Vec::new()));
         }
         if pos_list.iter().any(|pos| pos_height_in_tree(*pos) > 0) {
-            return Err(Error::NodeProofsNotSupported);
+            return Err(Error::GenProofForInvalidLeaves);
         }
         // ensure positions are sorted and unique
         pos_list.sort_unstable();
@@ -659,7 +659,7 @@ fn calculate_peaks_hashes<'a, T: 'a + Clone, M: Merge<Item = T>, I: Iterator<Ite
     mut proof_iter: I,
 ) -> Result<Vec<T>> {
     if leaves.iter().any(|(pos, _)| pos_height_in_tree(*pos) > 0) {
-        return Err(Error::NodeProofsNotSupported);
+        return Err(Error::GenProofForInvalidLeaves);
     }
 
     // special handle the only 1 leaf MMR
