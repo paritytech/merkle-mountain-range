@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-mod ancestry_proof;
+pub mod ancestry_proof;
 mod error;
 pub mod helper;
 mod merge;
@@ -10,6 +10,7 @@ mod mmr_store;
 mod tests;
 pub mod util;
 
+pub use ancestry_proof::{AncestryProof, MerkleProof as NodeMerkleProof};
 pub use error::{Error, Result};
 pub use helper::{leaf_index_to_mmr_size, leaf_index_to_pos};
 pub use merge::Merge;
