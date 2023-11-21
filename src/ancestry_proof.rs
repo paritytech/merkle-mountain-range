@@ -7,7 +7,6 @@ use crate::{Error, Merge, Result};
 use core::fmt::Debug;
 use core::marker::PhantomData;
 use itertools::Itertools;
-use std::iter::Peekable;
 
 #[derive(Debug)]
 pub struct MerkleProof<T, M> {
@@ -261,21 +260,18 @@ fn calculate_peaks_hashes<
     }
 
     // ensure nodes are sorted and unique
-    let nodes: Vec<_> = nodes
+    let mut nodes: Vec<_> = nodes
         .into_iter()
         .chain(proof_iter.cloned())
         .sorted_by_key(|(pos, _)| *pos)
         .dedup_by(|a, b| a.0 == b.0)
         .collect();
 
-    let mut nodes_iter = nodes.into_iter().peekable();
-
     let peaks = get_peaks(mmr_size);
 
     let mut peaks_hashes: Vec<T> = Vec::with_capacity(peaks.len() + 1);
     for peak_pos in peaks {
-        let mut nodes: Vec<(u64, T)> =
-            take_while_iter(&mut nodes_iter, |(pos, _)| *pos <= peak_pos);
+        let mut nodes: Vec<(u64, T)> = take_while_vec(&mut nodes, |(pos, _)| *pos <= peak_pos);
         let peak_root = if nodes.len() == 1 && nodes[0].0 == peak_pos {
             // leaf is the peak
             nodes.remove(0).1
@@ -291,7 +287,7 @@ fn calculate_peaks_hashes<
     }
 
     // ensure nothing left in leaves
-    if nodes_iter.len() != 0 {
+    if nodes.len() != 0 {
         return Err(Error::CorruptedProof);
     }
 
@@ -335,19 +331,11 @@ fn calculate_root<
     bagging_peaks_hashes::<_, M>(peaks_hashes)
 }
 
-fn take_while_iter<T, P: Fn(&T) -> bool, I>(i: &mut Peekable<I>, p: P) -> Vec<T>
-where
-    I: Iterator<Item = T>,
-{
-    let mut vec = Vec::new();
-    while let Some(peeked) = i.peek() {
-        if p(peeked) {
-            if let Some(item) = i.next() {
-                vec.push(item)
-            }
-        } else {
-            break;
+fn take_while_vec<T, P: Fn(&T) -> bool>(v: &mut Vec<T>, p: P) -> Vec<T> {
+    for i in 0..v.len() {
+        if !p(&v[i]) {
+            return v.drain(..i).collect();
         }
     }
-    vec
+    v.drain(..).collect()
 }
