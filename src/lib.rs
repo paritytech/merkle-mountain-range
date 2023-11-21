@@ -1,5 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+mod ancestry_proof;
 mod error;
 pub mod helper;
 mod merge;

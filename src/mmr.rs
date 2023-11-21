@@ -4,11 +4,12 @@
 //! https://github.com/mimblewimble/grin/blob/master/doc/mmr.md#structure
 //! https://github.com/mimblewimble/grin/blob/0ff6763ee64e5a14e70ddd4642b99789a1648a32/core/src/core/pmmr.rs#L606
 
+use crate::ancestry_proof::{AncestryProof, MerkleProof as NodeMerkleProof};
 use crate::borrow::Cow;
 use crate::collections::VecDeque;
 use crate::helper::{
-    get_peak_map, get_peaks, leaf_index_to_mmr_size, leaf_index_to_pos, parent_offset,
-    pos_height_in_tree, sibling_offset,
+    get_peak_map, get_peaks, is_descendant_pos, leaf_index_to_mmr_size, leaf_index_to_pos,
+    parent_offset, pos_height_in_tree, sibling_offset,
 };
 use crate::mmr_store::{MMRBatch, MMRStoreReadOps, MMRStoreWriteOps};
 use crate::vec;
@@ -102,6 +103,38 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
         self.bag_rhs_peaks(peaks)?.ok_or(Error::InconsistentStore)
     }
 
+    /// get_ancestor_root
+    pub fn get_ancestor_peaks_and_root(&self, prev_mmr_size: u64) -> Result<(Vec<T>, T)> {
+        if self.mmr_size == 0 {
+            return Err(Error::GetRootOnEmpty);
+        } else if self.mmr_size == 1 && prev_mmr_size == 1 {
+            let singleton = self.batch.get_elem(0)?.ok_or(Error::InconsistentStore);
+            match singleton {
+                Ok(singleton) => return Ok((vec![singleton.clone()], singleton)),
+                Err(e) => return Err(e),
+            }
+        } else if prev_mmr_size > self.mmr_size {
+            return Err(Error::AncestorRootNotPredecessor);
+        }
+        let peaks: Result<Vec<T>> = get_peaks(prev_mmr_size)
+            .into_iter()
+            .map(|peak_pos| {
+                self.batch
+                    .get_elem(peak_pos)
+                    .and_then(|elem| elem.ok_or(Error::InconsistentStore))
+            })
+            .collect::<Result<Vec<T>>>();
+        match peaks {
+            Ok(peaks) => {
+                let root = self
+                    .bag_rhs_peaks(peaks.clone())?
+                    .ok_or(Error::InconsistentStore)?;
+                return Ok((peaks, root));
+            }
+            Err(e) => Err(e),
+        }
+    }
+
     fn bag_rhs_peaks(&self, mut rhs_peaks: Vec<T>) -> Result<Option<T>> {
         while rhs_peaks.len() > 1 {
             let right_peak = rhs_peaks.pop().expect("pop");
@@ -181,13 +214,106 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
         Ok(())
     }
 
+    /// generate node merkle proof for a peak
+    /// the pos_list must be sorted, otherwise the behaviour is undefined
+    ///
+    /// 1. find a lower tree in peak that can generate a complete merkle proof for position
+    /// 2. find that tree by compare positions
+    /// 3. generate proof for each positions
+    fn gen_node_proof_for_peak(
+        &self,
+        proof: &mut Vec<(u64, T)>,
+        pos_list: Vec<u64>,
+        peak_pos: u64,
+    ) -> Result<()> {
+        // do nothing if position itself is the peak
+        if pos_list.len() == 1 && pos_list == [peak_pos] {
+            return Ok(());
+        }
+        // take peak root from store if no positions need to be proven
+        if pos_list.is_empty() {
+            proof.push((
+                peak_pos,
+                self.batch
+                    .get_elem(peak_pos)?
+                    .ok_or(Error::InconsistentStore)?,
+            ));
+            return Ok(());
+        }
+
+        let mut queue: VecDeque<_> = pos_list
+            .clone()
+            .into_iter()
+            .map(|pos| (pos, pos_height_in_tree(pos)))
+            .collect();
+
+        // Generate sub-tree merkle proof for positions
+        while let Some((pos, height)) = queue.pop_front() {
+            debug_assert!(pos <= peak_pos);
+            if pos == peak_pos {
+                if queue.is_empty() {
+                    break;
+                } else {
+                    continue;
+                }
+            }
+
+            // calculate sibling
+            let (sib_pos, parent_pos) = {
+                let next_height = pos_height_in_tree(pos + 1);
+                let sibling_offset = sibling_offset(height);
+                if next_height > height {
+                    // implies pos is right sibling
+                    (pos - sibling_offset, pos + 1)
+                } else {
+                    // pos is left sibling
+                    (pos + sibling_offset, pos + parent_offset(height))
+                }
+            };
+
+            let queue_front_pos = queue.front().map(|(pos, _)| pos);
+            if Some(&sib_pos) == queue_front_pos {
+                // drop sibling
+                queue.pop_front();
+            } else if queue_front_pos.is_none()
+                || !is_descendant_pos(
+                    sib_pos,
+                    *queue_front_pos.expect("checked queue_front_pos != None"),
+                )
+            // only push a sibling into the proof if either of these cases is satisfied:
+            // 1. the queue is empty
+            // 2. the next item in the queue is not the sibling or a child of it
+            {
+                let sibling = (
+                    sib_pos,
+                    self.batch
+                        .get_elem(sib_pos.clone())?
+                        .ok_or(Error::InconsistentStore)?,
+                );
+
+                // only push sibling if it's not already a proof item or to be proven,
+                // which can be the case if both a child and its parent are to be proven
+                if height == 0
+                    || !(proof.contains(&sibling)) && pos_list.binary_search(&sib_pos).is_err()
+                {
+                    proof.push(sibling);
+                }
+            }
+            if parent_pos < peak_pos {
+                // save pos to tree buf
+                queue.push_back((parent_pos, height + 1));
+            }
+        }
+        Ok(())
+    }
+
     /// Generate merkle proof for positions
     /// 1. sort positions
     /// 2. push merkle proof to proof by peak from left to right
     /// 3. push bagged right hand side root
     pub fn gen_proof(&self, mut pos_list: Vec<u64>) -> Result<MerkleProof<T, M>> {
         if pos_list.is_empty() {
-            return Err(Error::GenProofForInvalidLeaves);
+            return Err(Error::GenProofForInvalidNodes);
         }
         if self.mmr_size == 1 && pos_list == [0] {
             return Ok(MerkleProof::new(self.mmr_size, Vec::new()));
@@ -223,6 +349,69 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
         }
 
         Ok(MerkleProof::new(self.mmr_size, proof))
+    }
+
+    /// Generate proof that prior merkle root r' is an ancestor of current merkle proof r
+    /// 1. calculate positions of peaks of old root r' given mmr size n
+    /// 2. generate membership proof of peaks in root r
+    /// 3. calculate r' from peaks(n)
+    /// 4. return (mmr root r', peak hashes, membership proof of peaks(n) in r)
+    pub fn gen_ancestry_proof(&self, prev_mmr_size: u64) -> Result<AncestryProof<T, M>> {
+        let mut pos_list = get_peaks(prev_mmr_size);
+        if pos_list.is_empty() {
+            return Err(Error::GenProofForInvalidNodes);
+        }
+        if self.mmr_size == 1 && pos_list == [0] {
+            return Ok(AncestryProof {
+                prev_peaks: Vec::new(),
+                prev_size: self.mmr_size,
+                proof: NodeMerkleProof::new(self.mmr_size(), Vec::new()),
+            });
+        }
+        // ensure positions are sorted and unique
+        pos_list.sort_unstable();
+        pos_list.dedup();
+        let peaks = get_peaks(self.mmr_size);
+        let mut proof: Vec<(u64, T)> = Vec::new();
+        // generate merkle proof for each peaks
+        let mut bagging_track = 0;
+        for peak_pos in peaks {
+            let pos_list: Vec<_> = take_while_vec(&mut pos_list, |&pos| pos <= peak_pos);
+            if pos_list.is_empty() {
+                bagging_track += 1;
+            } else {
+                bagging_track = 0;
+            }
+            self.gen_node_proof_for_peak(&mut proof, pos_list, peak_pos)?;
+        }
+
+        // ensure no remain positions
+        if !pos_list.is_empty() {
+            return Err(Error::GenProofForInvalidNodes);
+        }
+
+        // starting from the rightmost peak, an unbroken sequence of
+        // peaks that don't have descendants to be proven can be bagged
+        // during the proof construction already since during verification,
+        // they'll only be utilized during the bagging step anyway
+        if bagging_track > 1 {
+            let rhs_peaks = proof.split_off(proof.len() - bagging_track);
+            proof.push((
+                rhs_peaks[0].0,
+                self.bag_rhs_peaks(rhs_peaks.iter().map(|(_pos, item)| item.clone()).collect())?
+                    .expect("bagging rhs peaks"),
+            ));
+        }
+
+        proof.sort_by_key(|(pos, _)| *pos);
+
+        let (prev_peaks, _prev_root) = self.get_ancestor_peaks_and_root(prev_mmr_size)?;
+
+        Ok(AncestryProof {
+            prev_peaks,
+            prev_size: prev_mmr_size,
+            proof: NodeMerkleProof::new(self.mmr_size, proof),
+        })
     }
 }
 

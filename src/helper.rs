@@ -75,6 +75,12 @@ pub fn get_peak_map(mmr_size: u64) -> u64 {
     peak_map
 }
 
+pub fn is_descendant_pos(ancestor_contender: u64, descendant_contender: u64) -> bool {
+    descendant_contender <= ancestor_contender
+        && descendant_contender
+            >= (ancestor_contender + 1 - sibling_offset(pos_height_in_tree(ancestor_contender)))
+}
+
 /// Returns the pos of the peaks in the mmr.
 /// for example, for a mmr with 11 leaves, the mmr_size is 19, it will return [14, 17, 18].
 ///           14
