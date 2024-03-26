@@ -4,7 +4,7 @@
 //! https://github.com/mimblewimble/grin/blob/master/doc/mmr.md#structure
 //! https://github.com/mimblewimble/grin/blob/0ff6763ee64e5a14e70ddd4642b99789a1648a32/core/src/core/pmmr.rs#L606
 
-use crate::ancestry_proof::{AncestryProof, MerkleProof as NodeMerkleProof};
+use crate::ancestry_proof::{AncestryProof, NodeMerkleProof};
 use crate::borrow::Cow;
 use crate::collections::VecDeque;
 use crate::helper::{

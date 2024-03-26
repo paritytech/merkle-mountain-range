@@ -10,7 +10,7 @@ use core::marker::PhantomData;
 use itertools::Itertools;
 
 #[derive(Debug)]
-pub struct MerkleProof<T, M> {
+pub struct NodeMerkleProof<T, M> {
     mmr_size: u64,
     proof: Vec<(u64, T)>,
     merge: PhantomData<M>,
@@ -20,7 +20,7 @@ pub struct MerkleProof<T, M> {
 pub struct AncestryProof<T, M> {
     pub prev_peaks: Vec<T>,
     pub prev_size: u64,
-    pub proof: MerkleProof<T, M>,
+    pub proof: NodeMerkleProof<T, M>,
 }
 
 impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> AncestryProof<T, M> {
@@ -56,9 +56,9 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> AncestryProof<T, M> {
     }
 }
 
-impl<T: Clone + PartialEq, M: Merge<Item = T>> MerkleProof<T, M> {
+impl<T: Clone + PartialEq, M: Merge<Item = T>> NodeMerkleProof<T, M> {
     pub fn new(mmr_size: u64, proof: Vec<(u64, T)>) -> Self {
-        MerkleProof {
+        NodeMerkleProof {
             mmr_size,
             proof,
             merge: PhantomData,

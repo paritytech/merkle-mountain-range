@@ -10,7 +10,7 @@ mod mmr_store;
 mod tests;
 pub mod util;
 
-pub use ancestry_proof::{AncestryProof, MerkleProof as NodeMerkleProof};
+pub use ancestry_proof::{AncestryProof, NodeMerkleProof};
 pub use error::{Error, Result};
 pub use helper::{leaf_index_to_mmr_size, leaf_index_to_pos};
 pub use merge::Merge;
