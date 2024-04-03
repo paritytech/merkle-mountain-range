@@ -708,7 +708,7 @@ fn calculate_peaks_hashes<'a, T: 'a + Clone, M: Merge<Item = T>, I: Iterator<Ite
     Ok(peaks_hashes)
 }
 
-fn bagging_peaks_hashes<T, M: Merge<Item = T>>(mut peaks_hashes: Vec<T>) -> Result<T> {
+pub(crate) fn bagging_peaks_hashes<T, M: Merge<Item = T>>(mut peaks_hashes: Vec<T>) -> Result<T> {
     // bagging peaks
     // bagging from right to left via hash(right, left).
     while peaks_hashes.len() > 1 {
@@ -732,7 +732,7 @@ fn calculate_root<'a, T: 'a + Clone, M: Merge<Item = T>, I: Iterator<Item = &'a 
     bagging_peaks_hashes::<_, M>(peaks_hashes)
 }
 
-fn take_while_vec<T, P: Fn(&T) -> bool>(v: &mut Vec<T>, p: P) -> Vec<T> {
+pub(crate) fn take_while_vec<T, P: Fn(&T) -> bool>(v: &mut Vec<T>, p: P) -> Vec<T> {
     for i in 0..v.len() {
         if !p(&v[i]) {
             return v.drain(..i).collect();

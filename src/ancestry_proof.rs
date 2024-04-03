@@ -3,6 +3,7 @@ use crate::helper::{
     get_peak_map, get_peaks, is_descendant_pos, leaf_index_to_pos, parent_offset,
     pos_height_in_tree, sibling_offset,
 };
+use crate::mmr::{bagging_peaks_hashes, take_while_vec};
 use crate::vec::Vec;
 use crate::{Error, Merge, Result};
 use core::fmt::Debug;
@@ -303,17 +304,6 @@ fn calculate_peaks_hashes<
     Ok(peaks_hashes)
 }
 
-pub fn bagging_peaks_hashes<T, M: Merge<Item = T>>(mut peaks_hashes: Vec<T>) -> Result<T> {
-    // bagging peaks
-    // bagging from right to left via hash(right, left).
-    while peaks_hashes.len() > 1 {
-        let right_peak = peaks_hashes.pop().expect("pop");
-        let left_peak = peaks_hashes.pop().expect("pop");
-        peaks_hashes.push(M::merge_peaks(&right_peak, &left_peak)?);
-    }
-    peaks_hashes.pop().ok_or(Error::CorruptedProof)
-}
-
 /// merkle proof
 /// 1. sort items by position
 /// 2. calculate root of each peak
@@ -332,11 +322,3 @@ fn calculate_root<
     bagging_peaks_hashes::<_, M>(peaks_hashes)
 }
 
-fn take_while_vec<T, P: Fn(&T) -> bool>(v: &mut Vec<T>, p: P) -> Vec<T> {
-    for i in 0..v.len() {
-        if !p(&v[i]) {
-            return v.drain(..i).collect();
-        }
-    }
-    v.drain(..).collect()
-}
