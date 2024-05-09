@@ -415,8 +415,8 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
         if self.mmr_size == 1 && pos_list == [0] {
             return Ok(AncestryProof {
                 prev_peaks: Vec::new(),
-                prev_size: self.mmr_size,
-                proof: NodeMerkleProof::new(self.mmr_size(), Vec::new()),
+                prev_mmr_size: self.mmr_size,
+                prev_peaks_proof: NodeMerkleProof::new(self.mmr_size(), Vec::new()),
             });
         }
         // ensure positions are sorted and unique
@@ -460,8 +460,8 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
 
         Ok(AncestryProof {
             prev_peaks,
-            prev_size: prev_mmr_size,
-            proof: NodeMerkleProof::new(self.mmr_size, proof),
+            prev_mmr_size: prev_mmr_size,
+            prev_peaks_proof: NodeMerkleProof::new(self.mmr_size, proof),
         })
     }
 }
