@@ -1,4 +1,4 @@
-use crate::collections::BTreeMap;
+use crate::collections::{BTreeMap, VecDeque};
 use crate::{vec::Vec, MMRStoreReadOps, MMRStoreWriteOps, Result, MMR};
 use core::cell::RefCell;
 
@@ -34,3 +34,18 @@ impl<T> MMRStoreWriteOps<T> for &MemStore<T> {
 }
 
 pub type MemMMR<'a, T, M> = MMR<T, M, &'a MemStore<T>>;
+
+pub trait VeqDequeExt<T: Ord> {
+    fn insert_sorted(&mut self, value: T);
+}
+
+impl<T: Ord> VeqDequeExt<T> for VecDeque<T> {
+    fn insert_sorted(&mut self, value: T) {
+        match self.binary_search(&value) {
+            Ok(_pos) => {
+                // element already in vector @ `pos`
+            }
+            Err(pos) => self.insert(pos, value),
+        }
+    }
+}
