@@ -3,6 +3,7 @@ use crate::helper::{
     get_peak_map, get_peaks, is_descendant_pos, leaf_index_to_pos, parent_offset,
     pos_height_in_tree, sibling_offset,
 };
+use crate::mmr::{bagging_peaks_hashes, take_while_vec};
 use crate::vec::Vec;
 use crate::{Error, Merge, Result};
 use core::fmt::Debug;
@@ -18,21 +19,21 @@ pub struct NodeMerkleProof<T, M> {
 
 #[derive(Debug)]
 pub struct AncestryProof<T, M> {
+    pub prev_mmr_size: u64,
     pub prev_peaks: Vec<T>,
-    pub prev_size: u64,
-    pub proof: NodeMerkleProof<T, M>,
+    pub prev_peaks_proof: NodeMerkleProof<T, M>,
 }
 
 impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> AncestryProof<T, M> {
     // TODO: restrict roots to be T::Node
     pub fn verify_ancestor(&self, root: T, prev_root: T) -> Result<bool> {
-        let current_leaves_count = get_peak_map(self.proof.mmr_size);
+        let current_leaves_count = get_peak_map(self.prev_peaks_proof.mmr_size);
         if current_leaves_count <= self.prev_peaks.len() as u64 {
             return Err(Error::CorruptedProof);
         }
         // Test if previous root is correct.
         let prev_peaks_positions = {
-            let prev_peaks_positions = get_peaks(self.prev_size);
+            let prev_peaks_positions = get_peaks(self.prev_mmr_size);
             if prev_peaks_positions.len() != self.prev_peaks.len() {
                 return Err(Error::CorruptedProof);
             }
@@ -52,7 +53,7 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> AncestryProof<T, M> {
             .map(|(peak, position)| (*position, peak))
             .collect();
 
-        self.proof.verify(root, nodes)
+        self.prev_peaks_proof.verify(root, nodes)
     }
 }
 
@@ -303,17 +304,6 @@ fn calculate_peaks_hashes<
     Ok(peaks_hashes)
 }
 
-pub fn bagging_peaks_hashes<T, M: Merge<Item = T>>(mut peaks_hashes: Vec<T>) -> Result<T> {
-    // bagging peaks
-    // bagging from right to left via hash(right, left).
-    while peaks_hashes.len() > 1 {
-        let right_peak = peaks_hashes.pop().expect("pop");
-        let left_peak = peaks_hashes.pop().expect("pop");
-        peaks_hashes.push(M::merge_peaks(&right_peak, &left_peak)?);
-    }
-    peaks_hashes.pop().ok_or(Error::CorruptedProof)
-}
-
 /// merkle proof
 /// 1. sort items by position
 /// 2. calculate root of each peak
@@ -330,13 +320,4 @@ fn calculate_root<
 ) -> Result<T> {
     let peaks_hashes = calculate_peaks_hashes::<_, M, _>(nodes, mmr_size, proof_iter)?;
     bagging_peaks_hashes::<_, M>(peaks_hashes)
-}
-
-fn take_while_vec<T, P: Fn(&T) -> bool>(v: &mut Vec<T>, p: P) -> Vec<T> {
-    for i in 0..v.len() {
-        if !p(&v[i]) {
-            return v.drain(..i).collect();
-        }
-    }
-    v.drain(..).collect()
 }

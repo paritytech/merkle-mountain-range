@@ -8,10 +8,11 @@ use crate::ancestry_proof::{AncestryProof, NodeMerkleProof};
 use crate::borrow::Cow;
 use crate::collections::VecDeque;
 use crate::helper::{
-    get_peak_map, get_peaks, is_descendant_pos, leaf_index_to_mmr_size, leaf_index_to_pos,
-    parent_offset, pos_height_in_tree, sibling_offset,
+    get_peak_map, get_peaks, leaf_index_to_mmr_size, leaf_index_to_pos, parent_offset,
+    pos_height_in_tree, sibling_offset,
 };
 use crate::mmr_store::{MMRBatch, MMRStoreReadOps, MMRStoreWriteOps};
+use crate::util::VeqDequeExt;
 use crate::vec;
 use crate::vec::Vec;
 use crate::{Error, Merge, Result};
@@ -215,7 +216,6 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
     }
 
     /// generate node merkle proof for a peak
-    /// the pos_list must be sorted, otherwise the behaviour is undefined
     ///
     /// 1. find a lower tree in peak that can generate a complete merkle proof for position
     /// 2. find that tree by compare positions
@@ -241,14 +241,13 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
             return Ok(());
         }
 
-        let mut queue: VecDeque<_> = pos_list
-            .clone()
-            .into_iter()
-            .map(|pos| (pos, pos_height_in_tree(pos)))
-            .collect();
+        let mut queue: VecDeque<_> = VecDeque::new();
+        for value in pos_list.iter().map(|pos| (pos_height_in_tree(*pos), *pos)) {
+            queue.insert_sorted(value);
+        }
 
         // Generate sub-tree merkle proof for positions
-        while let Some((pos, height)) = queue.pop_front() {
+        while let Some((height, pos)) = queue.pop_front() {
             debug_assert!(pos <= peak_pos);
             if pos == peak_pos {
                 if queue.is_empty() {
@@ -271,19 +270,10 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
                 }
             };
 
-            let queue_front_pos = queue.front().map(|(pos, _)| pos);
-            if Some(&sib_pos) == queue_front_pos {
+            if Some(&sib_pos) == queue.front().map(|(_, pos)| pos) {
                 // drop sibling
                 queue.pop_front();
-            } else if queue_front_pos.is_none()
-                || !is_descendant_pos(
-                    sib_pos,
-                    *queue_front_pos.expect("checked queue_front_pos != None"),
-                )
-            // only push a sibling into the proof if either of these cases is satisfied:
-            // 1. the queue is empty
-            // 2. the next item in the queue is not the sibling or a child of it
-            {
+            } else {
                 let sibling = (
                     sib_pos,
                     self.batch
@@ -291,17 +281,11 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
                         .ok_or(Error::InconsistentStore)?,
                 );
 
-                // only push sibling if it's not already a proof item or to be proven,
-                // which can be the case if both a child and its parent are to be proven
-                if height == 0
-                    || !(proof.contains(&sibling)) && pos_list.binary_search(&sib_pos).is_err()
-                {
-                    proof.push(sibling);
-                }
+                proof.push(sibling);
             }
             if parent_pos < peak_pos {
                 // save pos to tree buf
-                queue.push_back((parent_pos, height + 1));
+                queue.insert_sorted((height + 1, parent_pos));
             }
         }
         Ok(())
@@ -415,8 +399,8 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
         if self.mmr_size == 1 && pos_list == [0] {
             return Ok(AncestryProof {
                 prev_peaks: Vec::new(),
-                prev_size: self.mmr_size,
-                proof: NodeMerkleProof::new(self.mmr_size(), Vec::new()),
+                prev_mmr_size: self.mmr_size,
+                prev_peaks_proof: NodeMerkleProof::new(self.mmr_size(), Vec::new()),
             });
         }
         // ensure positions are sorted and unique
@@ -460,8 +444,8 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
 
         Ok(AncestryProof {
             prev_peaks,
-            prev_size: prev_mmr_size,
-            proof: NodeMerkleProof::new(self.mmr_size, proof),
+            prev_mmr_size: prev_mmr_size,
+            prev_peaks_proof: NodeMerkleProof::new(self.mmr_size, proof),
         })
     }
 }
@@ -708,7 +692,7 @@ fn calculate_peaks_hashes<'a, T: 'a + Clone, M: Merge<Item = T>, I: Iterator<Ite
     Ok(peaks_hashes)
 }
 
-fn bagging_peaks_hashes<T, M: Merge<Item = T>>(mut peaks_hashes: Vec<T>) -> Result<T> {
+pub(crate) fn bagging_peaks_hashes<T, M: Merge<Item = T>>(mut peaks_hashes: Vec<T>) -> Result<T> {
     // bagging peaks
     // bagging from right to left via hash(right, left).
     while peaks_hashes.len() > 1 {
@@ -732,7 +716,7 @@ fn calculate_root<'a, T: 'a + Clone, M: Merge<Item = T>, I: Iterator<Item = &'a 
     bagging_peaks_hashes::<_, M>(peaks_hashes)
 }
 
-fn take_while_vec<T, P: Fn(&T) -> bool>(v: &mut Vec<T>, p: P) -> Vec<T> {
+pub(crate) fn take_while_vec<T, P: Fn(&T) -> bool>(v: &mut Vec<T>, p: P) -> Vec<T> {
     for i in 0..v.len() {
         if !p(&v[i]) {
             return v.drain(..i).collect();
