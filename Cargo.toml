@@ -1,11 +1,16 @@
 [package]
-name = "ckb-merkle-mountain-range"
+name = "polkadot-ckb-merkle-mountain-range"
 version = "0.6.0"
-authors = ["Nervos Core Dev <dev@nervos.org>"]
+authors = [
+    "Nervos Core Dev <dev@nervos.org>",
+    "Parity Technologies <admin@parity.io>",
+    "Robert Hambrock <roberthambrock@gmail.com>"
+]
+
 edition = "2018"
 license = "MIT"
-description = "A generalized merkle mountain range implementation"
-repository = "https://github.com/nervosnetwork/merkle-mountain-range"
+description = "A generalized merkle mountain range implementation (polkadot fork)"
+repository = "https://github.com/paritytech/merkle-mountain-range"
 
 [features]
 default = ["std"]
