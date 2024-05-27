@@ -444,9 +444,22 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
 
         Ok(AncestryProof {
             prev_peaks,
-            prev_mmr_size: prev_mmr_size,
+            prev_mmr_size,
             prev_peaks_proof: NodeMerkleProof::new(self.mmr_size, proof),
         })
+    }
+
+    pub fn gen_ancestry_proof_next_leaf(
+        &self,
+        prev_mmr_size: u64,
+    ) -> Result<((u64, T), NodeMerkleProof<T, M>)> {
+        let next_leaf_pos = leaf_index_to_pos(prev_mmr_size + 1);
+        let next_leaf = self
+            .batch
+            .get_elem(next_leaf_pos)?
+            .ok_or(Error::InconsistentStore)?;
+        self.gen_node_proof(vec![next_leaf_pos])
+            .and_then(|proof| Ok(((next_leaf_pos, next_leaf), proof)))
     }
 }
 

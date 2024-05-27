@@ -97,6 +97,29 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> NodeMerkleProof<T, M> {
         Ok(calculated_root == root)
     }
 
+    pub fn verify_ancestor_next_leaf(
+        &self,
+        root: T,
+        leaf_n_plus_one: (u64, T),
+        ancestor: T,
+    ) -> Result<bool> {
+        if self.verify(root, vec![leaf_n_plus_one.clone()])? {
+            let left_peaks = self
+                .proof_items()
+                .iter()
+                .filter(|(pos, _)| pos < &leaf_n_plus_one.0)
+                .sorted_by(|a, b| Ord::cmp(&a.0, &b.0))
+                .map(|(_, hash)| hash.clone())
+                .collect();
+            bagging_peaks_hashes::<T, M>(left_peaks).and_then(|calculated_ancestor| {
+                println!("{:?} {:?}", calculated_ancestor, ancestor);
+                Ok(calculated_ancestor == ancestor)
+            })
+        } else {
+            Ok(false)
+        }
+    }
+
     /// Verifies a old root and all incremental leaves.
     ///
     /// If this method returns `true`, it means the following assertion are true:

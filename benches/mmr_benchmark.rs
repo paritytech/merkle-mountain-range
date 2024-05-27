@@ -41,15 +41,22 @@ impl Merge for MergeNumberHash {
     }
 }
 
-fn prepare_mmr(count: u32) -> (u64, MemStore<NumberHash>, Vec<u64>) {
+fn prepare_mmr(count: u32) -> (u64, MemStore<NumberHash>, Vec<u64>, Vec<(u32, NumberHash)>) {
     let store = MemStore::default();
+    let mut prev_roots = Vec::new();
     let mut mmr = MMR::<_, MergeNumberHash, _>::new(0, &store);
     let positions: Vec<u64> = (0u32..count)
-        .map(|i| mmr.push(NumberHash::try_from(i).unwrap()).unwrap())
+        .map(|i| {
+            let position = mmr.push(NumberHash::try_from(i).unwrap()).unwrap();
+            prev_roots.push((i + 1, mmr.get_root().expect("get root")));
+            position
+            // mmr.push(NumberHash::try_from(i).unwrap()).unwrap()
+        })
         .collect();
+    // println!("{:?}", mmr.get_root().expect("get root"));
     let mmr_size = mmr.mmr_size();
     mmr.commit().expect("write to store");
-    (mmr_size, store, positions)
+    (mmr_size, store, positions, prev_roots)
 }
 
 fn bench(c: &mut Criterion) {
@@ -64,14 +71,28 @@ fn bench(c: &mut Criterion) {
     }
 
     c.bench_function("MMR gen proof", |b| {
-        let (mmr_size, store, positions) = prepare_mmr(100_0000);
+        let (mmr_size, store, positions, _) = prepare_mmr(100_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         b.iter(|| mmr.gen_proof(vec![*positions.choose(&mut rng).unwrap()]));
     });
 
+    c.bench_function("MMR gen node-proof", |b| {
+        let (mmr_size, store, positions, _) = prepare_mmr(100_000);
+        let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
+        let mut rng = thread_rng();
+        b.iter(|| mmr.gen_node_proof(vec![*positions.choose(&mut rng).unwrap()]));
+    });
+
+    c.bench_function("MMR gen ancestry-proof", |b| {
+        let (mmr_size, store, _positions, roots) = prepare_mmr(100_000);
+        let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
+        let mut rng = thread_rng();
+        b.iter(|| mmr.gen_ancestry_proof(roots.choose(&mut rng).unwrap().0 as u64));
+    });
+
     c.bench_function("MMR verify", |b| {
-        let (mmr_size, store, positions) = prepare_mmr(100_0000);
+        let (mmr_size, store, positions, _) = prepare_mmr(100_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
@@ -87,6 +108,47 @@ fn bench(c: &mut Criterion) {
             let (pos, elem, proof) = proofs.choose(&mut rng).unwrap();
             proof
                 .verify(root.clone(), vec![(**pos, elem.clone())])
+                .unwrap();
+        });
+    });
+
+    c.bench_function("MMR verify node-proof", |b| {
+        let (mmr_size, store, positions, _) = prepare_mmr(100_000);
+        let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
+        let mut rng = thread_rng();
+        let root: NumberHash = mmr.get_root().unwrap();
+        let proofs: Vec<_> = (0..10_000)
+            .map(|_| {
+                let pos = positions.choose(&mut rng).unwrap();
+                let elem = (&store).get_elem(*pos).unwrap().unwrap();
+                let proof = mmr.gen_node_proof(vec![*pos]).unwrap();
+                (pos, elem, proof)
+            })
+            .collect();
+        b.iter(|| {
+            let (pos, elem, proof) = proofs.choose(&mut rng).unwrap();
+            proof
+                .verify(root.clone(), vec![(**pos, elem.clone())])
+                .unwrap();
+        });
+    });
+
+    c.bench_function("MMR verify ancestry-proof", |b| {
+        let (mmr_size, store, _positions, roots) = prepare_mmr(100_000);
+        let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
+        let mut rng = thread_rng();
+        let root: NumberHash = mmr.get_root().unwrap();
+        let proofs: Vec<_> = (0..10_000)
+            .map(|_| {
+                let (prev_size, prev_root) = roots.choose(&mut rng).unwrap();
+                let proof = mmr.gen_ancestry_proof(*prev_size as u64).unwrap();
+                (prev_root, proof)
+            })
+            .collect();
+        b.iter(|| {
+            let (prev_root, proof) = proofs.choose(&mut rng).unwrap();
+            proof
+                .verify_ancestor(root.clone(), prev_root.clone().clone())
                 .unwrap();
         });
     });
