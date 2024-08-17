@@ -288,3 +288,41 @@ fn calculate_root<
     let peaks_hashes = calculate_peaks_hashes::<_, M, _>(nodes, mmr_size, proof_iter)?;
     bagging_peaks_hashes::<_, M>(peaks_hashes)
 }
+
+pub fn expected_ancestry_proof_size(prev_mmr_size: u64, mmr_size: u64) -> usize {
+    let mut expected_proof_size: usize = 0;
+    let mut prev_peaks = get_peaks(prev_mmr_size);
+    let peaks = get_peaks(mmr_size);
+
+    for (peak_idx, peak) in peaks.iter().enumerate() {
+        let mut local_prev_peaks: Vec<u64> = take_while_vec(&mut prev_peaks, |pos| *pos <= *peak);
+
+        // Pop lowest local prev peak under the current peak
+        match local_prev_peaks.pop() {
+            Some(mut node) => {
+                let mut height = pos_height_in_tree(node);
+                while node < *peak {
+                    if pos_height_in_tree(node + 1) > height {
+                        // Node is right sibling
+                        node += 1;
+                        height += 1;
+                    } else {
+                        // Node is left sibling
+                        expected_proof_size += 1;
+                        node += parent_offset(height);
+                        height += 1;
+                    }
+                }
+            }
+            None => {
+                if peak_idx <= peaks.len() {
+                    // Account for rhs bagging peaks
+                    expected_proof_size += 1;
+                }
+                break;
+            }
+        }
+    }
+
+    expected_proof_size
+}
