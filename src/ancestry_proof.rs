@@ -182,9 +182,11 @@ fn calculate_peak_root<
                     let sibling_item = queue.pop_front().map(|(_, item, _)| item).unwrap();
                     M::merge(&sibling_item, &item)?
                 } else {
+                    return Err(Error::CorruptedProof);
+                    // Old `mmr.rs` code. It's not needed anymore since now we merge the `proof_iter`
+                    // items with the nodes.
                     // let sibling_item = &proof_iter.next().ok_or(Error::CorruptedProof)?.1;
                     // M::merge(sibling_item, &item)?
-                    return Err(Error::CorruptedProof);
                 };
                 (parent_pos, parent_item)
             } else {
@@ -195,9 +197,11 @@ fn calculate_peak_root<
                     let sibling_item = queue.pop_front().map(|(_, item, _)| item).unwrap();
                     M::merge(&item, &sibling_item)?
                 } else {
+                    return Err(Error::CorruptedProof);
+                    // Old `mmr.rs` code. It's not needed anymore since now we merge the `proof_iter`
+                    // items with the nodes.
                     // let sibling_item = &proof_iter.next().ok_or(Error::CorruptedProof)?.1;
                     // M::merge(&item, sibling_item)?
-                    return Err(Error::CorruptedProof);
                 };
                 (parent_pos, parent_item)
             }
@@ -260,6 +264,8 @@ fn calculate_peaks_hashes<
         return Err(Error::CorruptedProof);
     }
 
+    // Old `mmr.rs` code. It's not needed anymore since now we merge the `proof_iter`
+    // items with the nodes.
     // // check rhs peaks
     // if let Some((_, rhs_peaks_hashes)) = proof_iter.next() {
     //     peaks_hashes.push(rhs_peaks_hashes.clone());
