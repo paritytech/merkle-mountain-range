@@ -23,11 +23,15 @@ cfg_if::cfg_if! {
         use std::collections;
         use std::vec;
         use std::string;
+        use std::collections::BTreeSet;
+        use std::collections::BTreeMap;
     } else {
         extern crate alloc;
         use alloc::borrow;
         use alloc::collections;
         use alloc::vec;
         use alloc::string;
+        use alloc::collections::btree_set::BTreeSet;
+        use alloc::collections::btree_map::BTreeMap;
     }
 }

@@ -12,13 +12,12 @@ use crate::helper::{
     pos_height_in_tree, sibling_offset,
 };
 use crate::mmr_store::{MMRBatch, MMRStoreReadOps, MMRStoreWriteOps};
-use crate::util::VeqDequeExt;
 use crate::vec;
 use crate::vec::Vec;
+use crate::BTreeSet;
 use crate::{Error, Merge, Result};
 use core::fmt::Debug;
 use core::marker::PhantomData;
-
 #[allow(clippy::upper_case_acronyms)]
 pub struct MMR<T, M, S> {
     mmr_size: u64,
@@ -241,13 +240,13 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
             return Ok(());
         }
 
-        let mut queue: VecDeque<_> = VecDeque::new();
+        let mut queue = BTreeSet::new();
         for value in pos_list.iter().map(|pos| (pos_height_in_tree(*pos), *pos)) {
-            queue.insert_sorted(value);
+            queue.insert(value);
         }
 
         // Generate sub-tree merkle proof for positions
-        while let Some((height, pos)) = queue.pop_front() {
+        while let Some((height, pos)) = queue.pop_first() {
             debug_assert!(pos <= peak_pos);
             if pos == peak_pos {
                 if queue.is_empty() {
@@ -270,9 +269,9 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
                 }
             };
 
-            if Some(&sib_pos) == queue.front().map(|(_, pos)| pos) {
+            if Some(&sib_pos) == queue.first().map(|(_, pos)| pos) {
                 // drop sibling
-                queue.pop_front();
+                queue.pop_first();
             } else {
                 let sibling = (
                     sib_pos,
@@ -285,7 +284,7 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>, S: MMRStoreReadOps<T>> MMR<T, M, 
             }
             if parent_pos < peak_pos {
                 // save pos to tree buf
-                queue.insert_sorted((height + 1, parent_pos));
+                queue.insert((height + 1, parent_pos));
             }
         }
         Ok(())
