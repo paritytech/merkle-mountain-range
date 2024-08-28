@@ -25,6 +25,7 @@ cfg_if::cfg_if! {
         use std::string;
         use std::collections::BTreeSet;
         use std::collections::BTreeMap;
+        use std::collections::btree_map::Entry as BTreeMapEntry;
     } else {
         extern crate alloc;
         use alloc::borrow;
@@ -33,5 +34,6 @@ cfg_if::cfg_if! {
         use alloc::string;
         use alloc::collections::btree_set::BTreeSet;
         use alloc::collections::btree_map::BTreeMap;
+        use alloc::collections::btree_map::Entry as BTreeMapEntry;
     }
 }

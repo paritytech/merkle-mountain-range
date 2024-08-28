@@ -41,12 +41,20 @@ pub trait BTreeMapExt<K, V> {
 
 impl<K: Ord, V: PartialEq> BTreeMapExt<K, V> for BTreeMap<K, V> {
     fn checked_insert(&mut self, key: K, value: V) -> bool {
-        let old_value = self.get(&key);
-        if old_value != None && old_value != Some(&value) {
-            return false;
+        use crate::BTreeMapEntry;
+
+        let entry = self.entry(key);
+        match entry {
+            BTreeMapEntry::Vacant(slot) => {
+                slot.insert(value);
+            }
+            BTreeMapEntry::Occupied(old_value) => {
+                if old_value.get() != &value {
+                    return false;
+                }
+            }
         }
 
-        self.insert(key, value);
         true
     }
 }
