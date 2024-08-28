@@ -292,33 +292,26 @@ pub fn expected_ancestry_proof_size(prev_mmr_size: u64, mmr_size: u64) -> usize 
     let mut prev_peaks = get_peaks(prev_mmr_size);
     let peaks = get_peaks(mmr_size);
 
-    for (peak_idx, peak) in peaks.iter().enumerate() {
-        let mut local_prev_peaks: Vec<u64> = take_while_vec(&mut prev_peaks, |pos| *pos <= *peak);
+    for peak in peaks.iter() {
+        let local_prev_peaks: Vec<u64> = take_while_vec(&mut prev_peaks, |pos| *pos <= *peak);
 
-        // Pop lowest local prev peak under the current peak
-        match local_prev_peaks.pop() {
-            Some(mut node) => {
-                let mut height = pos_height_in_tree(node);
-                while node < *peak {
-                    if pos_height_in_tree(node + 1) > height {
-                        // Node is right sibling
-                        node += 1;
-                        height += 1;
-                    } else {
-                        // Node is left sibling
-                        expected_proof_size += 1;
-                        node += parent_offset(height);
-                        height += 1;
-                    }
-                }
-            }
-            None => {
-                if peak_idx <= peaks.len() {
-                    // Account for rhs bagging peaks
-                    expected_proof_size += 1;
-                }
-                break;
-            }
+        // skip if the peak is also the prev_peak: then trivially no additional proof items
+        if local_prev_peaks.len() == 1 && local_prev_peaks[0] == *peak {
+            continue;
+        }
+
+        // calculate the number of leaves after the last element of local_prev_peaks
+        let leaves = 1 << pos_height_in_tree(*peak);
+        let local_prev_peaks_leaves: u64 = local_prev_peaks
+            .iter()
+            .map(|pos| 1 << pos_height_in_tree(*pos))
+            .sum();
+        let leaves_diff = leaves - local_prev_peaks_leaves;
+
+        expected_proof_size += leaves_diff.count_ones() as usize;
+
+        if local_prev_peaks.is_empty() {
+            break;
         }
     }
 
