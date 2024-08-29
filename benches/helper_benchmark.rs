@@ -2,7 +2,7 @@
 extern crate criterion;
 use criterion::Criterion;
 
-use ckb_merkle_mountain_range::{leaf_index_to_mmr_size, leaf_index_to_pos};
+use polkadot_ckb_merkle_mountain_range::{leaf_index_to_mmr_size, leaf_index_to_pos};
 
 use rand::{thread_rng, Rng};
 
