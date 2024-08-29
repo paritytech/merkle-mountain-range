@@ -4,7 +4,9 @@ extern crate criterion;
 use criterion::{black_box, BenchmarkId, Criterion};
 
 use bytes::Bytes;
-use polkadot_ckb_merkle_mountain_range::ancestry_proof::expected_ancestry_proof_size;
+use polkadot_ckb_merkle_mountain_range::ancestry_proof::{
+    expected_ancestry_proof_size, expected_ancestry_proof_size_alternate,
+};
 use polkadot_ckb_merkle_mountain_range::{
     util::MemStore, Error, MMRStoreReadOps, Merge, Result, MMR,
 };
@@ -167,6 +169,19 @@ fn bench(c: &mut Criterion) {
                 if i < j {
                     // black_box(expected_ancestry_proof_size(i, j));
                     black_box(expected_ancestry_proof_size(i, j));
+                }
+            }
+        })
+    });
+
+    c.bench_function("expected_ancestry_proof_size_alternate", |b| {
+        b.iter(|| {
+            for (i, j) in iproduct!(
+                INDEX_OFFSET..INDEX_OFFSET + INDEX_DOMAIN,
+                INDEX_OFFSET + 1..INDEX_OFFSET + INDEX_DOMAIN + 1
+            ) {
+                if i < j {
+                    black_box(expected_ancestry_proof_size_alternate(i, j));
                 }
             }
         })
