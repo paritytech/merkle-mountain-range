@@ -4,7 +4,6 @@ extern crate criterion;
 use criterion::{black_box, BenchmarkId, Criterion};
 
 use bytes::Bytes;
-use polkadot_ckb_merkle_mountain_range::ancestry_proof::expected_ancestry_proof_size;
 use polkadot_ckb_merkle_mountain_range::{
     util::MemStore, Error, MMRStoreReadOps, Merge, Result, MMR,
 };
@@ -65,39 +64,29 @@ const INDEX_OFFSET: u64 = 100_000;
 const INDEX_DOMAIN: u64 = 2_000;
 
 fn bench(c: &mut Criterion) {
-    {
-        let mut group = c.benchmark_group("MMR insertion");
-        let inputs = [10_000, 100_000, 100_0000];
-        for input in inputs.iter() {
-            group.bench_with_input(BenchmarkId::new("times", input), &input, |b, &&size| {
-                b.iter(|| prepare_mmr(size));
-            });
-        }
-    }
-
     c.bench_function("MMR gen proof", |b| {
-        let (mmr_size, store, positions, _) = prepare_mmr(1000_000);
+        let (mmr_size, store, positions, _) = prepare_mmr(100_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         b.iter(|| mmr.gen_proof(vec![*positions.choose(&mut rng).unwrap()]));
     });
 
     c.bench_function("MMR gen node-proof", |b| {
-        let (mmr_size, store, positions, _) = prepare_mmr(1000_000);
+        let (mmr_size, store, positions, _) = prepare_mmr(100_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         b.iter(|| mmr.gen_node_proof(vec![*positions.choose(&mut rng).unwrap()]));
     });
 
     c.bench_function("MMR gen ancestry-proof", |b| {
-        let (mmr_size, store, _positions, roots) = prepare_mmr(1000_000);
+        let (mmr_size, store, _positions, roots) = prepare_mmr(100_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         b.iter(|| mmr.gen_ancestry_proof(roots.choose(&mut rng).unwrap().0 as u64));
     });
 
     c.bench_function("MMR verify", |b| {
-        let (mmr_size, store, positions, _) = prepare_mmr(1000_000);
+        let (mmr_size, store, positions, _) = prepare_mmr(100_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
@@ -118,7 +107,7 @@ fn bench(c: &mut Criterion) {
     });
 
     c.bench_function("MMR verify node-proof", |b| {
-        let (mmr_size, store, positions, _) = prepare_mmr(1000_000);
+        let (mmr_size, store, positions, _) = prepare_mmr(100_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
@@ -139,7 +128,7 @@ fn bench(c: &mut Criterion) {
     });
 
     c.bench_function("MMR verify ancestry-proof", |b| {
-        let (mmr_size, store, _positions, roots) = prepare_mmr(1000_000);
+        let (mmr_size, store, _positions, roots) = prepare_mmr(100_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
@@ -156,20 +145,6 @@ fn bench(c: &mut Criterion) {
                 .verify_ancestor(root.clone(), prev_root.clone().clone())
                 .unwrap();
         });
-    });
-
-    c.bench_function("expected_ancestry_proof_size", |b| {
-        b.iter(|| {
-            for (i, j) in iproduct!(
-                INDEX_OFFSET..INDEX_OFFSET + INDEX_DOMAIN,
-                INDEX_OFFSET + 1..INDEX_OFFSET + INDEX_DOMAIN + 1
-            ) {
-                if i < j {
-                    // black_box(expected_ancestry_proof_size(i, j));
-                    black_box(expected_ancestry_proof_size(i, j));
-                }
-            }
-        })
     });
 }
 
