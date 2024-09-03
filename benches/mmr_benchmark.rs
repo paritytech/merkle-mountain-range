@@ -44,20 +44,47 @@ impl Merge for MergeNumberHash {
     }
 }
 
-fn prepare_mmr(count: u32) -> (u64, MemStore<NumberHash>, Vec<u64>, Vec<(u32, NumberHash)>) {
+fn _prepare_mmr(
+    count: u32,
+    roots: bool,
+) -> (
+    u64,
+    MemStore<NumberHash>,
+    Vec<u64>,
+    Option<Vec<(u32, NumberHash)>>,
+) {
     let store = MemStore::default();
     let mut prev_roots = Vec::new();
     let mut mmr = MMR::<_, MergeNumberHash, _>::new(0, &store);
     let positions: Vec<u64> = (0u32..count)
         .map(|i| {
             let position = mmr.push(NumberHash::try_from(i).unwrap()).unwrap();
-            prev_roots.push((i + 1, mmr.get_root().expect("get root")));
+            if roots {
+                prev_roots.push((i + 1, mmr.get_root().expect("get root")));
+            }
             position
         })
         .collect();
     let mmr_size = mmr.mmr_size();
     mmr.commit().expect("write to store");
-    (mmr_size, store, positions, prev_roots)
+    (
+        mmr_size,
+        store,
+        positions,
+        if roots { Some(prev_roots) } else { None },
+    )
+}
+
+fn prepare_mmr_no_roots(count: u32) -> (u64, MemStore<NumberHash>, Vec<u64>) {
+    let (mmr_size, store, positions, _) = _prepare_mmr(count, false);
+    (mmr_size, store, positions)
+}
+
+fn prepare_mmr_with_roots(
+    count: u32,
+) -> (u64, MemStore<NumberHash>, Vec<u64>, Vec<(u32, NumberHash)>) {
+    let (mmr_size, store, positions, roots) = _prepare_mmr(count, true);
+    (mmr_size, store, positions, roots.unwrap())
 }
 
 const INDEX_OFFSET: u64 = 100_000;
@@ -65,28 +92,28 @@ const INDEX_DOMAIN: u64 = 2_000;
 
 fn bench(c: &mut Criterion) {
     c.bench_function("MMR gen proof", |b| {
-        let (mmr_size, store, positions, _) = prepare_mmr(100_000);
+        let (mmr_size, store, positions) = prepare_mmr_no_roots(100_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         b.iter(|| mmr.gen_proof(vec![*positions.choose(&mut rng).unwrap()]));
     });
 
     c.bench_function("MMR gen node-proof", |b| {
-        let (mmr_size, store, positions, _) = prepare_mmr(100_000);
+        let (mmr_size, store, positions) = prepare_mmr_no_roots(100_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         b.iter(|| mmr.gen_node_proof(vec![*positions.choose(&mut rng).unwrap()]));
     });
 
     c.bench_function("MMR gen ancestry-proof", |b| {
-        let (mmr_size, store, _positions, roots) = prepare_mmr(100_000);
+        let (mmr_size, store, _positions, roots) = prepare_mmr_with_roots(100_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         b.iter(|| mmr.gen_ancestry_proof(roots.choose(&mut rng).unwrap().0 as u64));
     });
 
     c.bench_function("MMR verify", |b| {
-        let (mmr_size, store, positions, _) = prepare_mmr(100_000);
+        let (mmr_size, store, positions) = prepare_mmr_no_roots(100_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
@@ -107,7 +134,8 @@ fn bench(c: &mut Criterion) {
     });
 
     c.bench_function("MMR verify node-proof", |b| {
-        let (mmr_size, store, positions, _) = prepare_mmr(100_000);
+        let (mmr_size, store, positions) = prepare_mmr_no_roots(20_000_000);
+        println!("MMR prepared");
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
@@ -128,7 +156,7 @@ fn bench(c: &mut Criterion) {
     });
 
     c.bench_function("MMR verify ancestry-proof", |b| {
-        let (mmr_size, store, _positions, roots) = prepare_mmr(100_000);
+        let (mmr_size, store, _positions, roots) = prepare_mmr_with_roots(100_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
