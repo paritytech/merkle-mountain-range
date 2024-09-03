@@ -92,32 +92,32 @@ const INDEX_DOMAIN: u64 = 2_000;
 
 fn bench(c: &mut Criterion) {
     c.bench_function("MMR gen proof", |b| {
-        let (mmr_size, store, positions) = prepare_mmr_no_roots(100_000);
+        let (mmr_size, store, positions) = prepare_mmr_no_roots(20_000_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         b.iter(|| mmr.gen_proof(vec![*positions.choose(&mut rng).unwrap()]));
     });
 
     c.bench_function("MMR gen node-proof", |b| {
-        let (mmr_size, store, positions) = prepare_mmr_no_roots(100_000);
+        let (mmr_size, store, positions) = prepare_mmr_no_roots(20_000_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         b.iter(|| mmr.gen_node_proof(vec![*positions.choose(&mut rng).unwrap()]));
     });
 
     c.bench_function("MMR gen ancestry-proof", |b| {
-        let (mmr_size, store, _positions, roots) = prepare_mmr_with_roots(100_000);
+        let (mmr_size, store, _positions, roots) = prepare_mmr_with_roots(50_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         b.iter(|| mmr.gen_ancestry_proof(roots.choose(&mut rng).unwrap().0 as u64));
     });
 
     c.bench_function("MMR verify", |b| {
-        let (mmr_size, store, positions) = prepare_mmr_no_roots(100_000);
+        let (mmr_size, store, positions) = prepare_mmr_no_roots(20_000_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
-        let proofs: Vec<_> = (0..10_000)
+        let proofs: Vec<_> = (0..100_000)
             .map(|_| {
                 let pos = positions.choose(&mut rng).unwrap();
                 let elem = (&store).get_elem(*pos).unwrap().unwrap();
@@ -139,7 +139,7 @@ fn bench(c: &mut Criterion) {
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
-        let proofs: Vec<_> = (0..10_000)
+        let proofs: Vec<_> = (0..100_000)
             .map(|_| {
                 let pos = positions.choose(&mut rng).unwrap();
                 let elem = (&store).get_elem(*pos).unwrap().unwrap();
@@ -156,11 +156,11 @@ fn bench(c: &mut Criterion) {
     });
 
     c.bench_function("MMR verify ancestry-proof", |b| {
-        let (mmr_size, store, _positions, roots) = prepare_mmr_with_roots(100_000);
+        let (mmr_size, store, _positions, roots) = prepare_mmr_with_roots(50_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
-        let proofs: Vec<_> = (0..10_000)
+        let proofs: Vec<_> = (0..50_000)
             .map(|_| {
                 let (prev_size, prev_root) = roots.choose(&mut rng).unwrap();
                 let proof = mmr.gen_ancestry_proof(*prev_size as u64).unwrap();
@@ -178,7 +178,7 @@ fn bench(c: &mut Criterion) {
 
 criterion_group!(
     name = benches;
-    config = Criterion::default().sample_size(20);
+    config = Criterion::default().sample_size(10);
     targets = bench
 );
 criterion_main!(benches);
