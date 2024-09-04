@@ -296,7 +296,7 @@ pub fn expected_ancestry_proof_size(prev_mmr_size: u64, mmr_size: u64) -> usize 
         let local_prev_peaks: Vec<u64> = take_while_vec(&mut prev_peaks, |pos| *pos <= *peak);
 
         // skip if the peak is also the prev_peak: then trivially no additional proof items
-        if local_prev_peaks.len() == 1 && local_prev_peaks[0] == *peak {
+        if local_prev_peaks.as_slice() == [*peak] {
             continue;
         }
 
