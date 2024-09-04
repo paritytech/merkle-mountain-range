@@ -105,6 +105,20 @@ fn bench(c: &mut Criterion) {
         b.iter(|| mmr.gen_node_proof(vec![*positions.choose(&mut rng).unwrap()]));
     });
 
+    c.bench_function("MMR gen node-proof batch", |b| {
+        let (mmr_size, store, positions) = prepare_mmr_no_roots(20_000_000);
+        let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
+        let mut rng = thread_rng();
+        b.iter(|| {
+            mmr.gen_node_proof(
+                positions
+                    .choose_multiple(&mut rng, 100_000)
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            )
+        });
+    });
+
     c.bench_function("MMR gen ancestry-proof", |b| {
         let (mmr_size, store, _positions, roots) = prepare_mmr_with_roots(50_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
@@ -155,6 +169,36 @@ fn bench(c: &mut Criterion) {
         });
     });
 
+    c.bench_function("MMR verify batch node-proof", |b| {
+        let (mmr_size, store, positions) = prepare_mmr_no_roots(20_000_000);
+        let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
+        let mut rng = thread_rng();
+        let root: NumberHash = mmr.get_root().unwrap();
+        let proofs: Vec<_> = (0..100_000)
+            .map(|_| {
+                // choose multiple positions from the MMR
+                let pos_sample: Vec<u64> = positions
+                    .choose_multiple(&mut rng, 100_000)
+                    .cloned()
+                    .collect();
+                let elems = pos_sample
+                    .iter()
+                    .map(|pos| (&store).get_elem(*pos).unwrap().unwrap())
+                    .collect::<Vec<_>>();
+                let proof = mmr.gen_node_proof(pos_sample.clone()).unwrap();
+                let elem_tuples = pos_sample
+                    .into_iter()
+                    .zip(elems.into_iter())
+                    .collect::<Vec<_>>();
+                (elem_tuples, proof)
+            })
+            .collect();
+        b.iter(|| {
+            let (elem_tuples, proof) = proofs.choose(&mut rng).unwrap();
+            proof.verify(root.clone(), elem_tuples.clone()).unwrap();
+        });
+    });
+
     c.bench_function("MMR verify ancestry-proof", |b| {
         let (mmr_size, store, _positions, roots) = prepare_mmr_with_roots(50_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
@@ -178,7 +222,7 @@ fn bench(c: &mut Criterion) {
 
 criterion_group!(
     name = benches;
-    config = Criterion::default().sample_size(10);
+    config = Criterion::default().sample_size(20);
     targets = bench
 );
 criterion_main!(benches);
