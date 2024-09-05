@@ -105,14 +105,14 @@ fn bench(c: &mut Criterion) {
         b.iter(|| mmr.gen_node_proof(vec![*positions.choose(&mut rng).unwrap()]));
     });
 
-    c.bench_function("MMR gen node-proof batch", |b| {
+    c.bench_function("MMR gen batch node-proof", |b| {
         let (mmr_size, store, positions) = prepare_mmr_no_roots(20_000_000);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         b.iter(|| {
             mmr.gen_node_proof(
                 positions
-                    .choose_multiple(&mut rng, 100_000)
+                    .choose_multiple(&mut rng, 1_000)
                     .cloned()
                     .collect::<Vec<_>>(),
             )
@@ -174,11 +174,11 @@ fn bench(c: &mut Criterion) {
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
-        let proofs: Vec<_> = (0..100_000)
-            .map(|_| {
+        let proofs: Vec<_> = (0..500)
+            .map(|i| {
                 // choose multiple positions from the MMR
                 let pos_sample: Vec<u64> = positions
-                    .choose_multiple(&mut rng, 100_000)
+                    .choose_multiple(&mut rng, 1_000)
                     .cloned()
                     .collect();
                 let elems = pos_sample
