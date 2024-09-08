@@ -131,20 +131,20 @@ fn bench(c: &mut Criterion) {
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
-        let proofs: Vec<_> = (0..100_000)
-            .map(|_| {
+
+        b.iter_with_setup(
+            || {
                 let pos = positions.choose(&mut rng).unwrap();
                 let elem = (&store).get_elem(*pos).unwrap().unwrap();
                 let proof = mmr.gen_proof(vec![*pos]).unwrap();
                 (pos, elem, proof)
-            })
-            .collect();
-        b.iter(|| {
-            let (pos, elem, proof) = proofs.choose(&mut rng).unwrap();
-            proof
-                .verify(root.clone(), vec![(**pos, elem.clone())])
-                .unwrap();
-        });
+            },
+            |(pos, elem, proof)| {
+                proof
+                    .verify(root.clone(), vec![(*pos, elem.clone())])
+                    .unwrap();
+            },
+        );
     });
 
     c.bench_function("MMR verify node-proof", |b| {
@@ -153,20 +153,18 @@ fn bench(c: &mut Criterion) {
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
-        let proofs: Vec<_> = (0..100_000)
-            .map(|_| {
-                let pos = positions.choose(&mut rng).unwrap();
-                let elem = (&store).get_elem(*pos).unwrap().unwrap();
-                let proof = mmr.gen_node_proof(vec![*pos]).unwrap();
+
+        b.iter_with_setup(
+            || {
+                let pos = *positions.choose(&mut rng).unwrap();
+                let elem = (&store).get_elem(pos).unwrap().unwrap();
+                let proof = mmr.gen_node_proof(vec![pos]).unwrap();
                 (pos, elem, proof)
-            })
-            .collect();
-        b.iter(|| {
-            let (pos, elem, proof) = proofs.choose(&mut rng).unwrap();
-            proof
-                .verify(root.clone(), vec![(**pos, elem.clone())])
-                .unwrap();
-        });
+            },
+            |(pos, elem, proof)| {
+                proof.verify(root.clone(), vec![(pos, elem)]).unwrap();
+            },
+        );
     });
 
     c.bench_function("MMR verify batch node-proof", |b| {
@@ -205,19 +203,17 @@ fn bench(c: &mut Criterion) {
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
-        let proofs: Vec<_> = (0..50_000)
-            .map(|_| {
+
+        b.iter_with_setup(
+            || {
                 let (prev_size, prev_root) = roots.choose(&mut rng).unwrap();
                 let proof = mmr.gen_ancestry_proof(*prev_size as u64).unwrap();
-                (prev_root, proof)
-            })
-            .collect();
-        b.iter(|| {
-            let (prev_root, proof) = proofs.choose(&mut rng).unwrap();
-            proof
-                .verify_ancestor(root.clone(), prev_root.clone().clone())
-                .unwrap();
-        });
+                (prev_root.clone(), proof)
+            },
+            |(prev_root, proof)| {
+                proof.verify_ancestor(root.clone(), prev_root).unwrap();
+            },
+        );
     });
 }
 
