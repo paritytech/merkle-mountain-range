@@ -174,11 +174,12 @@ fn bench(c: &mut Criterion) {
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
-        let proofs: Vec<_> = (0..100)
-            .map(|i| {
-                // choose multiple positions from the MMR
+
+        b.iter_with_setup(
+            || {
+                // Setup: Generate a new proof for each iteration
                 let pos_sample: Vec<u64> = positions
-                    .choose_multiple(&mut rng, 200_000)
+                    .choose_multiple(&mut rng, 2_000_000)
                     .cloned()
                     .collect();
                 let elems = pos_sample
@@ -191,12 +192,12 @@ fn bench(c: &mut Criterion) {
                     .zip(elems.into_iter())
                     .collect::<Vec<_>>();
                 (elem_tuples, proof)
-            })
-            .collect();
-        b.iter(|| {
-            let (elem_tuples, proof) = proofs.choose(&mut rng).unwrap();
-            proof.verify(root.clone(), elem_tuples.clone()).unwrap();
-        });
+            },
+            |(elem_tuples, proof)| {
+                // Benchmark: Verify the proof
+                proof.verify(root.clone(), elem_tuples).unwrap();
+            },
+        );
     });
 
     c.bench_function("MMR verify ancestry-proof", |b| {
