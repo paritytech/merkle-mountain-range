@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate criterion;
 
-use criterion::{black_box, BenchmarkId, Criterion};
+use criterion::{black_box, BatchSize, BenchmarkId, Criterion};
 
 use bytes::Bytes;
 use polkadot_ckb_merkle_mountain_range::{
@@ -132,7 +132,7 @@ fn bench(c: &mut Criterion) {
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
 
-        b.iter_with_setup(
+        b.iter_batched(
             || {
                 let pos = positions.choose(&mut rng).unwrap();
                 let elem = (&store).get_elem(*pos).unwrap().unwrap();
@@ -144,17 +144,17 @@ fn bench(c: &mut Criterion) {
                     .verify(root.clone(), vec![(*pos, elem.clone())])
                     .unwrap();
             },
+            BatchSize::SmallInput,
         );
     });
 
     c.bench_function("MMR verify node-proof", |b| {
         let (mmr_size, store, positions) = prepare_mmr_no_roots(20_000_000);
-        println!("MMR prepared");
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
 
-        b.iter_with_setup(
+        b.iter_batched(
             || {
                 let pos = *positions.choose(&mut rng).unwrap();
                 let elem = (&store).get_elem(pos).unwrap().unwrap();
@@ -164,6 +164,7 @@ fn bench(c: &mut Criterion) {
             |(pos, elem, proof)| {
                 proof.verify(root.clone(), vec![(pos, elem)]).unwrap();
             },
+            BatchSize::SmallInput,
         );
     });
 
@@ -173,7 +174,7 @@ fn bench(c: &mut Criterion) {
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
 
-        b.iter_with_setup(
+        b.iter_batched(
             || {
                 // Setup: Generate a new proof for each iteration
                 let pos_sample: Vec<u64> = positions
@@ -195,6 +196,7 @@ fn bench(c: &mut Criterion) {
                 // Benchmark: Verify the proof
                 proof.verify(root.clone(), elem_tuples).unwrap();
             },
+            BatchSize::SmallInput,
         );
     });
 
@@ -204,7 +206,7 @@ fn bench(c: &mut Criterion) {
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
 
-        b.iter_with_setup(
+        b.iter_batched(
             || {
                 let (prev_size, prev_root) = roots.choose(&mut rng).unwrap();
                 let proof = mmr.gen_ancestry_proof(*prev_size as u64).unwrap();
@@ -213,6 +215,7 @@ fn bench(c: &mut Criterion) {
             |(prev_root, proof)| {
                 proof.verify_ancestor(root.clone(), prev_root).unwrap();
             },
+            BatchSize::SmallInput,
         );
     });
 }
