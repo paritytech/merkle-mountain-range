@@ -1,13 +1,11 @@
 use crate::collections::VecDeque;
 use crate::helper::{
-    get_peak_map, get_peaks, leaf_index_to_pos, parent_offset, pos_height_in_tree, sibling_offset,
+    get_peak_map, get_peaks, is_descendant_pos, leaf_index_to_pos, parent_offset,
+    pos_height_in_tree, sibling_offset,
 };
-pub use crate::mmr::bagging_peaks_hashes;
-use crate::mmr::take_while_vec;
-use crate::util::VeqDequeExt;
+use crate::mmr::{bagging_peaks_hashes, take_while_vec};
 use crate::vec::Vec;
 use crate::{Error, Merge, Result};
-use core::cmp::Ordering;
 use core::fmt::Debug;
 use core::marker::PhantomData;
 use itertools::Itertools;
@@ -33,12 +31,15 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> AncestryProof<T, M> {
         if current_leaves_count <= self.prev_peaks.len() as u64 {
             return Err(Error::CorruptedProof);
         }
-
         // Test if previous root is correct.
-        let prev_peaks_positions = get_peaks(self.prev_mmr_size);
-        if prev_peaks_positions.len() != self.prev_peaks.len() {
-            return Err(Error::CorruptedProof);
-        }
+        let prev_peaks_positions = {
+            let prev_peaks_positions = get_peaks(self.prev_mmr_size);
+            if prev_peaks_positions.len() != self.prev_peaks.len() {
+                return Err(Error::CorruptedProof);
+            }
+            prev_peaks_positions
+        };
+
         let calculated_prev_root = bagging_peaks_hashes::<T, M>(self.prev_peaks.clone())?;
         if calculated_prev_root != prev_root {
             return Ok(false);
@@ -73,8 +74,8 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> NodeMerkleProof<T, M> {
         &self.proof
     }
 
-    pub fn calculate_root(&self, nodes: Vec<(u64, T)>) -> Result<T> {
-        calculate_root::<_, M, _>(nodes, self.mmr_size, self.proof.iter())
+    pub fn calculate_root(&self, leaves: Vec<(u64, T)>) -> Result<T> {
+        calculate_root::<_, M, _>(leaves, self.mmr_size, self.proof.iter())
     }
 
     /// from merkle proof of leaf n to calculate merkle root of n + 1 leaves.
@@ -135,40 +136,49 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> NodeMerkleProof<T, M> {
     }
 }
 
-fn cmp_nodes<T>(a: &(u64, T, u8), b: &(u64, T, u8)) -> Ordering {
-    let (a_pos, _, a_height) = a;
-    let (b_pos, _, b_height) = b;
-    (a_height, a_pos).cmp(&(b_height, b_pos))
-}
-
 fn calculate_peak_root<
     'a,
     T: 'a + PartialEq,
     M: Merge<Item = T>,
-    // I: Iterator<Item = &'a (u64, T)>,
+    // I: Iterator<Item = &'a T>
 >(
     nodes: Vec<(u64, T)>,
     peak_pos: u64,
     // proof_iter: &mut I,
 ) -> Result<T> {
-    let mut queue: VecDeque<_> = VecDeque::new();
-    for value in nodes
+    debug_assert!(!nodes.is_empty(), "can't be empty");
+    // (position, hash, height)
+
+    let mut queue: VecDeque<_> = nodes
         .into_iter()
         .map(|(pos, item)| (pos, item, pos_height_in_tree(pos)))
-    {
-        if !queue.insert_sorted_by(value, cmp_nodes) {
-            return Err(Error::CorruptedProof);
-        }
-    }
+        .collect();
 
+    let mut sibs_processed_from_back = Vec::new();
+
+    // calculate tree root from each items
     while let Some((pos, item, height)) = queue.pop_front() {
         if pos == peak_pos {
             if queue.is_empty() {
                 // return root once queue is consumed
                 return Ok(item);
-            } else {
+            }
+            if queue
+                .iter()
+                .any(|entry| entry.0 == peak_pos && entry.1 != item)
+            {
                 return Err(Error::CorruptedProof);
             }
+            if queue
+                .iter()
+                .all(|entry| entry.0 == peak_pos && &entry.1 == &item && entry.2 == height)
+            {
+                // return root if remaining queue consists only of duplicate root entries
+                return Ok(item);
+            }
+            // if queue not empty, push peak back to the end
+            queue.push_back((pos, item, height));
+            continue;
         }
         // calculate sibling
         let next_height = pos_height_in_tree(pos + 1);
@@ -176,27 +186,45 @@ fn calculate_peak_root<
             let sibling_offset = sibling_offset(height);
             if next_height > height {
                 // implies pos is right sibling
-                let sib_pos = pos - sibling_offset;
-                let parent_pos = pos + 1;
+                let (sib_pos, parent_pos) = (pos - sibling_offset, pos + 1);
                 let parent_item = if Some(&sib_pos) == queue.front().map(|(pos, _, _)| pos) {
                     let sibling_item = queue.pop_front().map(|(_, item, _)| item).unwrap();
                     M::merge(&sibling_item, &item)?
+                } else if Some(&sib_pos) == queue.back().map(|(pos, _, _)| pos) {
+                    let sibling_item = queue.pop_back().map(|(_, item, _)| item).unwrap();
+                    M::merge(&sibling_item, &item)?
+                }
+                // handle special if next queue item is descendant of sibling
+                else if let Some(&(front_pos, ..)) = queue.front() {
+                    if height > 0 && is_descendant_pos(sib_pos, front_pos) {
+                        queue.push_back((pos, item, height));
+                        continue;
+                    } else {
+                        return Err(Error::CorruptedProof);
+                    }
                 } else {
-                    // let sibling_item = &proof_iter.next().ok_or(Error::CorruptedProof)?.1;
-                    // M::merge(sibling_item, &item)?
                     return Err(Error::CorruptedProof);
                 };
                 (parent_pos, parent_item)
             } else {
                 // pos is left sibling
-                let sib_pos = pos + sibling_offset;
-                let parent_pos = pos + parent_offset(height);
+                let (sib_pos, parent_pos) = (pos + sibling_offset, pos + parent_offset(height));
                 let parent_item = if Some(&sib_pos) == queue.front().map(|(pos, _, _)| pos) {
                     let sibling_item = queue.pop_front().map(|(_, item, _)| item).unwrap();
                     M::merge(&item, &sibling_item)?
+                } else if Some(&sib_pos) == queue.back().map(|(pos, _, _)| pos) {
+                    let sibling_item = queue.pop_back().map(|(_, item, _)| item).unwrap();
+                    let parent = M::merge(&item, &sibling_item)?;
+                    sibs_processed_from_back.push((sib_pos, sibling_item, height));
+                    parent
+                } else if let Some(&(front_pos, ..)) = queue.front() {
+                    if height > 0 && is_descendant_pos(sib_pos, front_pos) {
+                        queue.push_back((pos, item, height));
+                        continue;
+                    } else {
+                        return Err(Error::CorruptedProof);
+                    }
                 } else {
-                    // let sibling_item = &proof_iter.next().ok_or(Error::CorruptedProof)?.1;
-                    // M::merge(&item, sibling_item)?
                     return Err(Error::CorruptedProof);
                 };
                 (parent_pos, parent_item)
@@ -204,9 +232,13 @@ fn calculate_peak_root<
         };
 
         if parent_pos <= peak_pos {
-            if !queue.insert_sorted_by((parent_pos, parent_item, height + 1), cmp_nodes) {
-                return Err(Error::CorruptedProof);
-            }
+            let parent = (parent_pos, parent_item, height + 1);
+            if peak_pos == parent_pos
+                || queue.front() != Some(&parent)
+                    && !sibs_processed_from_back.iter().any(|item| item == &parent)
+            {
+                queue.push_front(parent)
+            };
         } else {
             return Err(Error::CorruptedProof);
         }
@@ -234,6 +266,7 @@ fn calculate_peaks_hashes<
         .into_iter()
         .chain(proof_iter.cloned())
         .sorted_by_key(|(pos, _)| *pos)
+        .dedup_by(|a, b| a.0 == b.0)
         .collect();
 
     let peaks = get_peaks(mmr_size);
@@ -260,11 +293,11 @@ fn calculate_peaks_hashes<
         return Err(Error::CorruptedProof);
     }
 
-    // // check rhs peaks
+    // check rhs peaks
     // if let Some((_, rhs_peaks_hashes)) = proof_iter.next() {
     //     peaks_hashes.push(rhs_peaks_hashes.clone());
     // }
-    // // ensure nothing left in proof_iter
+    // ensure nothing left in proof_iter
     // if proof_iter.next().is_some() {
     //     return Err(Error::CorruptedProof);
     // }

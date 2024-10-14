@@ -692,7 +692,7 @@ fn calculate_peaks_hashes<'a, T: 'a + Clone, M: Merge<Item = T>, I: Iterator<Ite
     Ok(peaks_hashes)
 }
 
-pub fn bagging_peaks_hashes<T, M: Merge<Item = T>>(mut peaks_hashes: Vec<T>) -> Result<T> {
+pub(crate) fn bagging_peaks_hashes<T, M: Merge<Item = T>>(mut peaks_hashes: Vec<T>) -> Result<T> {
     // bagging peaks
     // bagging from right to left via hash(right, left).
     while peaks_hashes.len() > 1 {
