@@ -293,6 +293,8 @@ fn calculate_peaks_hashes<
         return Err(Error::CorruptedProof);
     }
 
+    // Old `mmr.rs` code. It's not needed anymore since now we merge the `proof_iter`
+    // items with the nodes.
     // check rhs peaks
     // if let Some((_, rhs_peaks_hashes)) = proof_iter.next() {
     //     peaks_hashes.push(rhs_peaks_hashes.clone());
