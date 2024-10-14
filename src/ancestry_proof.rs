@@ -1,12 +1,13 @@
+use crate::collections::VecDeque;
 use crate::helper::{
     get_peak_map, get_peaks, leaf_index_to_pos, parent_offset, pos_height_in_tree, sibling_offset,
 };
 pub use crate::mmr::bagging_peaks_hashes;
 use crate::mmr::take_while_vec;
-use crate::util::BTreeMapExt;
+use crate::util::VeqDequeExt;
 use crate::vec::Vec;
-use crate::BTreeMap;
 use crate::{Error, Merge, Result};
+use core::cmp::Ordering;
 use core::fmt::Debug;
 use core::marker::PhantomData;
 use itertools::Itertools;
@@ -134,6 +135,12 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> NodeMerkleProof<T, M> {
     }
 }
 
+fn cmp_nodes<T>(a: &(u64, T, u8), b: &(u64, T, u8)) -> Ordering {
+    let (a_pos, _, a_height) = a;
+    let (b_pos, _, b_height) = b;
+    (a_height, a_pos).cmp(&(b_height, b_pos))
+}
+
 fn calculate_peak_root<
     'a,
     T: 'a + PartialEq,
@@ -144,14 +151,17 @@ fn calculate_peak_root<
     peak_pos: u64,
     // proof_iter: &mut I,
 ) -> Result<T> {
-    let mut queue = BTreeMap::new();
-    for (pos, item) in nodes.into_iter() {
-        if !queue.checked_insert((pos_height_in_tree(pos), pos), item) {
+    let mut queue: VecDeque<_> = VecDeque::new();
+    for value in nodes
+        .into_iter()
+        .map(|(pos, item)| (pos, item, pos_height_in_tree(pos)))
+    {
+        if !queue.insert_sorted_by(value, cmp_nodes) {
             return Err(Error::CorruptedProof);
         }
     }
 
-    while let Some(((height, pos), item)) = queue.pop_first() {
+    while let Some((pos, item, height)) = queue.pop_front() {
         if pos == peak_pos {
             if queue.is_empty() {
                 // return root once queue is consumed
@@ -168,39 +178,33 @@ fn calculate_peak_root<
                 // implies pos is right sibling
                 let sib_pos = pos - sibling_offset;
                 let parent_pos = pos + 1;
-                let parent_item =
-                    if Some(&sib_pos) == queue.first_key_value().map(|((_, pos), _)| pos) {
-                        let sibling_item = queue.pop_first().map(|((_, _), item)| item).unwrap();
-                        M::merge(&sibling_item, &item)?
-                    } else {
-                        return Err(Error::CorruptedProof);
-                        // Old `mmr.rs` code. It's not needed anymore since now we merge the `proof_iter`
-                        // items with the nodes.
-                        // let sibling_item = &proof_iter.next().ok_or(Error::CorruptedProof)?.1;
-                        // M::merge(sibling_item, &item)?
-                    };
+                let parent_item = if Some(&sib_pos) == queue.front().map(|(pos, _, _)| pos) {
+                    let sibling_item = queue.pop_front().map(|(_, item, _)| item).unwrap();
+                    M::merge(&sibling_item, &item)?
+                } else {
+                    // let sibling_item = &proof_iter.next().ok_or(Error::CorruptedProof)?.1;
+                    // M::merge(sibling_item, &item)?
+                    return Err(Error::CorruptedProof);
+                };
                 (parent_pos, parent_item)
             } else {
                 // pos is left sibling
                 let sib_pos = pos + sibling_offset;
                 let parent_pos = pos + parent_offset(height);
-                let parent_item =
-                    if Some(&sib_pos) == queue.first_key_value().map(|((_, pos), _)| pos) {
-                        let sibling_item = queue.pop_first().map(|((_, _), item)| item).unwrap();
-                        M::merge(&item, &sibling_item)?
-                    } else {
-                        return Err(Error::CorruptedProof);
-                        // Old `mmr.rs` code. It's not needed anymore since now we merge the `proof_iter`
-                        // items with the nodes.
-                        // let sibling_item = &proof_iter.next().ok_or(Error::CorruptedProof)?.1;
-                        // M::merge(&item, sibling_item)?
-                    };
+                let parent_item = if Some(&sib_pos) == queue.front().map(|(pos, _, _)| pos) {
+                    let sibling_item = queue.pop_front().map(|(_, item, _)| item).unwrap();
+                    M::merge(&item, &sibling_item)?
+                } else {
+                    // let sibling_item = &proof_iter.next().ok_or(Error::CorruptedProof)?.1;
+                    // M::merge(&item, sibling_item)?
+                    return Err(Error::CorruptedProof);
+                };
                 (parent_pos, parent_item)
             }
         };
 
         if parent_pos <= peak_pos {
-            if !queue.checked_insert((height + 1, parent_pos), parent_item) {
+            if !queue.insert_sorted_by((parent_pos, parent_item, height + 1), cmp_nodes) {
                 return Err(Error::CorruptedProof);
             }
         } else {
@@ -256,8 +260,6 @@ fn calculate_peaks_hashes<
         return Err(Error::CorruptedProof);
     }
 
-    // Old `mmr.rs` code. It's not needed anymore since now we merge the `proof_iter`
-    // items with the nodes.
     // // check rhs peaks
     // if let Some((_, rhs_peaks_hashes)) = proof_iter.next() {
     //     peaks_hashes.push(rhs_peaks_hashes.clone());
