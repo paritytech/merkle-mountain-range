@@ -87,32 +87,34 @@ fn prepare_mmr_with_roots(
     (mmr_size, store, positions, roots.unwrap())
 }
 
-const INDEX_OFFSET: u64 = 100_000;
-const INDEX_DOMAIN: u64 = 2_000;
+const MMR_LEAF_COUNT_NO_ROOTS: u32 = 200_000;
+// lower leaf count when retaining roots due to high memory load
+const MMR_LEAF_COUNT_WITH_ROOTS: u32 = 50_000;
 
 fn bench(c: &mut Criterion) {
     c.bench_function("MMR gen proof", |b| {
-        let (mmr_size, store, positions) = prepare_mmr_no_roots(20_000_000);
+        let (mmr_size, store, positions) = prepare_mmr_no_roots(MMR_LEAF_COUNT_NO_ROOTS);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         b.iter(|| mmr.gen_proof(vec![*positions.choose(&mut rng).unwrap()]));
     });
 
     c.bench_function("MMR gen node-proof", |b| {
-        let (mmr_size, store, positions) = prepare_mmr_no_roots(20_000_000);
+        let (mmr_size, store, positions) = prepare_mmr_no_roots(MMR_LEAF_COUNT_NO_ROOTS);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         b.iter(|| mmr.gen_node_proof(vec![*positions.choose(&mut rng).unwrap()]));
     });
 
     c.bench_function("MMR gen batch node-proof", |b| {
-        let (mmr_size, store, positions) = prepare_mmr_no_roots(20_000_000);
+        let (mmr_size, store, positions) = prepare_mmr_no_roots(MMR_LEAF_COUNT_NO_ROOTS);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         b.iter(|| {
             mmr.gen_node_proof(
                 positions
-                    .choose_multiple(&mut rng, 2_000_000)
+                    // Sample 10% of the leaves for the batch proof
+                    .choose_multiple(&mut rng, (MMR_LEAF_COUNT_NO_ROOTS / 10) as usize)
                     .cloned()
                     .collect::<Vec<_>>(),
             )
@@ -120,14 +122,15 @@ fn bench(c: &mut Criterion) {
     });
 
     c.bench_function("MMR gen ancestry-proof", |b| {
-        let (mmr_size, store, _positions, roots) = prepare_mmr_with_roots(50_000);
+        let (mmr_size, store, _positions, roots) =
+            prepare_mmr_with_roots(MMR_LEAF_COUNT_WITH_ROOTS);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         b.iter(|| mmr.gen_ancestry_proof(roots.choose(&mut rng).unwrap().0 as u64));
     });
 
     c.bench_function("MMR verify", |b| {
-        let (mmr_size, store, positions) = prepare_mmr_no_roots(20_000_000);
+        let (mmr_size, store, positions) = prepare_mmr_no_roots(MMR_LEAF_COUNT_NO_ROOTS);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
@@ -149,7 +152,7 @@ fn bench(c: &mut Criterion) {
     });
 
     c.bench_function("MMR verify node-proof", |b| {
-        let (mmr_size, store, positions) = prepare_mmr_no_roots(20_000_000);
+        let (mmr_size, store, positions) = prepare_mmr_no_roots(MMR_LEAF_COUNT_NO_ROOTS);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
@@ -169,7 +172,7 @@ fn bench(c: &mut Criterion) {
     });
 
     c.bench_function("MMR verify batch node-proof", |b| {
-        let (mmr_size, store, positions) = prepare_mmr_no_roots(20_000_000);
+        let (mmr_size, store, positions) = prepare_mmr_no_roots(MMR_LEAF_COUNT_NO_ROOTS);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
@@ -178,7 +181,8 @@ fn bench(c: &mut Criterion) {
             || {
                 // Setup: Generate a new proof for each iteration
                 let pos_sample: Vec<u64> = positions
-                    .choose_multiple(&mut rng, 2_000_000)
+                    // Sample 10% of the leaves for the batch proof
+                    .choose_multiple(&mut rng, (MMR_LEAF_COUNT_NO_ROOTS / 10) as usize)
                     .cloned()
                     .collect();
                 let elems = pos_sample
