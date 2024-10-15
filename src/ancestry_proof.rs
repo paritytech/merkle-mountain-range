@@ -293,6 +293,8 @@ fn calculate_peaks_hashes<
         return Err(Error::CorruptedProof);
     }
 
+    // Old `mmr.rs` code. It's not needed anymore since now we merge the `proof_iter`
+    // items with the nodes.
     // check rhs peaks
     // if let Some((_, rhs_peaks_hashes)) = proof_iter.next() {
     //     peaks_hashes.push(rhs_peaks_hashes.clone());
@@ -320,4 +322,35 @@ fn calculate_root<
 ) -> Result<T> {
     let peaks_hashes = calculate_peaks_hashes::<_, M, _>(nodes, mmr_size, proof_iter)?;
     bagging_peaks_hashes::<_, M>(peaks_hashes)
+}
+
+pub fn expected_ancestry_proof_size(prev_mmr_size: u64, mmr_size: u64) -> usize {
+    let mut expected_proof_size: usize = 0;
+    let mut prev_peaks = get_peaks(prev_mmr_size);
+    let peaks = get_peaks(mmr_size);
+
+    for peak in peaks.iter() {
+        let local_prev_peaks: Vec<u64> = take_while_vec(&mut prev_peaks, |pos| *pos <= *peak);
+
+        // skip if the peak is also the prev_peak: then trivially no additional proof items
+        if local_prev_peaks.as_slice() == [*peak] {
+            continue;
+        }
+
+        // calculate the number of leaves after the last element of local_prev_peaks
+        let leaves = 1 << pos_height_in_tree(*peak);
+        let local_prev_peaks_leaves: u64 = local_prev_peaks
+            .iter()
+            .map(|pos| 1 << pos_height_in_tree(*pos))
+            .sum();
+        let leaves_diff = leaves - local_prev_peaks_leaves;
+
+        expected_proof_size += leaves_diff.count_ones() as usize;
+
+        if local_prev_peaks.is_empty() {
+            break;
+        }
+    }
+
+    expected_proof_size
 }
