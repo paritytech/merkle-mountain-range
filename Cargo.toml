@@ -1,6 +1,6 @@
 [package]
 name = "polkadot-ckb-merkle-mountain-range"
-version = "0.8.0"
+version = "0.8.1"
 authors = [
 	"Nervos Core Dev <dev@nervos.org>",
 	"Parity Technologies <admin@parity.io>",
@@ -18,7 +18,7 @@ std = []
 
 [dependencies]
 cfg-if = "1.0"
-itertools = {version = "0.10.5", default-features = false, features = ["use_alloc"]}
+itertools = { version = "0.10.5", default-features = false, features = ["use_alloc"] }
 
 [dev-dependencies]
 faster-hex = "0.8.0"
