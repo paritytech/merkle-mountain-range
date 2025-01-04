@@ -87,9 +87,18 @@ fn prepare_mmr_with_roots(
     (mmr_size, store, positions, roots.unwrap())
 }
 
-const MMR_LEAF_COUNT_NO_ROOTS: u32 = 200_000;
+const MMR_LEAF_COUNT_NO_ROOTS: u32 = if cfg!(feature = "production-bench") {
+    20_000_000
+} else {
+    200_000
+};
 // lower leaf count when retaining roots due to high memory load
-const MMR_LEAF_COUNT_WITH_ROOTS: u32 = 50_000;
+const MMR_LEAF_COUNT_WITH_ROOTS: u32 = if cfg!(feature = "production-bench") {
+    500_000
+} else {
+    50_000
+};
+
 
 fn bench(c: &mut Criterion) {
     c.bench_function("MMR gen proof", |b| {
@@ -205,7 +214,8 @@ fn bench(c: &mut Criterion) {
     });
 
     c.bench_function("MMR verify ancestry-proof", |b| {
-        let (mmr_size, store, _positions, roots) = prepare_mmr_with_roots(50_000);
+        let (mmr_size, store, _positions, roots) =
+            prepare_mmr_with_roots(MMR_LEAF_COUNT_WITH_ROOTS);
         let mmr = MMR::<_, MergeNumberHash, _>::new(mmr_size, &store);
         let mut rng = thread_rng();
         let root: NumberHash = mmr.get_root().unwrap();
@@ -226,7 +236,7 @@ fn bench(c: &mut Criterion) {
 
 criterion_group!(
     name = benches;
-    config = Criterion::default().sample_size(20);
+    config = Criterion::default().sample_size(if cfg!(feature = "production-bench") {10} else {20});
     targets = bench
 );
 criterion_main!(benches);
