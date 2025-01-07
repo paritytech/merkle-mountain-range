@@ -3,7 +3,8 @@ use crate::helper::{
     get_peak_map, get_peaks, is_descendant_pos, leaf_index_to_pos, parent_offset,
     pos_height_in_tree, sibling_offset,
 };
-use crate::mmr::{bagging_peaks_hashes, take_while_vec};
+pub use crate::mmr::bagging_peaks_hashes;
+use crate::mmr::take_while_vec;
 use crate::vec::Vec;
 use crate::{Error, Merge, Result};
 use core::fmt::Debug;
