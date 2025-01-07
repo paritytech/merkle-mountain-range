@@ -88,13 +88,13 @@ fn prepare_mmr_with_roots(
 }
 
 const MMR_LEAF_COUNT_NO_ROOTS: u32 = if cfg!(feature = "production-bench") {
-    20_000_000
+    40_000_000
 } else {
     200_000
 };
 // lower leaf count when retaining roots due to high memory load
 const MMR_LEAF_COUNT_WITH_ROOTS: u32 = if cfg!(feature = "production-bench") {
-    500_000
+    1_000_000
 } else {
     50_000
 };
