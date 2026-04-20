@@ -16,6 +16,21 @@ pub fn leaf_index_to_mmr_size(index: u64) -> u64 {
     2 * leaves_count - peak_count
 }
 
+/// Whether `mmr_size` is the size of a well-formed MMR.
+///
+/// `get_peaks` / `get_peak_map` silently round invalid sizes down to "the last valid MMR",
+/// so every `verify*` entry point must reject invalid sizes up front — otherwise an attacker
+/// can pick an invalid size whose rounded-down peak set lets them pass canonical-peak checks
+/// using attacker-chosen node hashes. Round-trip check: for any valid size `n`, the leaf count
+/// `k = get_peak_map(n)` round-trips back via `leaf_index_to_mmr_size(k - 1) == n`.
+pub fn is_valid_mmr_size(mmr_size: u64) -> bool {
+    if mmr_size == 0 {
+        return true;
+    }
+    let leaves = get_peak_map(mmr_size);
+    leaves != 0 && leaf_index_to_mmr_size(leaves - 1) == mmr_size
+}
+
 pub fn pos_height_in_tree(mut pos: u64) -> u8 {
     if pos == 0 {
         return 0;

@@ -8,8 +8,8 @@ use crate::ancestry_proof::{AncestryProof, NodeMerkleProof};
 use crate::borrow::Cow;
 use crate::collections::VecDeque;
 use crate::helper::{
-    get_peak_map, get_peaks, leaf_index_to_mmr_size, leaf_index_to_pos, parent_offset,
-    pos_height_in_tree, sibling_offset,
+    get_peak_map, get_peaks, is_valid_mmr_size, leaf_index_to_mmr_size, leaf_index_to_pos,
+    parent_offset, pos_height_in_tree, sibling_offset,
 };
 use crate::mmr_store::{MMRBatch, MMRStoreReadOps, MMRStoreWriteOps};
 use crate::util::VeqDequeExt;
@@ -527,6 +527,9 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> MerkleProof<T, M> {
     /// - The MMR, which could generate the old root, appends all incremental leaves, becomes the
     ///   current MMR.
     pub fn verify_incremental(&self, root: T, prev_root: T, incremental: Vec<T>) -> Result<bool> {
+        if !is_valid_mmr_size(self.mmr_size) {
+            return Err(Error::CorruptedProof);
+        }
         let current_leaves_count = get_peak_map(self.mmr_size);
         if current_leaves_count <= incremental.len() as u64 {
             return Err(Error::CorruptedProof);
@@ -642,6 +645,10 @@ fn calculate_peaks_hashes<'a, T: 'a + Clone, M: Merge<Item = T>, I: Iterator<Ite
     mmr_size: u64,
     mut proof_iter: I,
 ) -> Result<Vec<T>> {
+    // See `ancestry_proof::calculate_peaks_hashes` for why invalid mmr_size must be rejected.
+    if !is_valid_mmr_size(mmr_size) {
+        return Err(Error::CorruptedProof);
+    }
     if leaves.iter().any(|(pos, _)| pos_height_in_tree(*pos) > 0) {
         return Err(Error::GenProofForInvalidLeaves);
     }

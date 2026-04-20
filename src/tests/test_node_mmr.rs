@@ -178,6 +178,36 @@ fn test_node_proof_rejects_conflicting_duplicate_positions() {
 }
 
 #[test]
+fn test_node_proof_rejects_invalid_mmr_size_forgery() {
+    // Build a real 4-leaf MMR (mmr_size = 7). Its single peak is node_6 = merge(node_2, node_5),
+    // where node_2 = merge(leaf_0, leaf_1) and node_5 = merge(leaf_2, leaf_3).
+    //
+    // Attack: an attacker crafts a NodeMerkleProof claiming an invalid mmr_size of 5.
+    // `get_peaks(5)` silently rounds to the last valid MMR and returns [2, 3], and the
+    // attacker places node_2 at position 2 and node_5 at position 3. Neither position is
+    // climbed (each peak receives exactly one entry at the peak position), so the "peaks"
+    // are the attacker's node hashes directly, and bagging them reproduces node_6 — the
+    // real root — without the attacker having to break any hash.
+    let store = MemStore::default();
+    let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, &store);
+    for i in 0u32..4 {
+        mmr.push(NumberHash::from(i)).unwrap();
+    }
+    let real_root = mmr.get_root().unwrap();
+    let node_2 = mmr.batch().get_elem(2).unwrap().unwrap();
+    let node_5 = mmr.batch().get_elem(5).unwrap().unwrap();
+
+    let forgery = NodeMerkleProof::<_, MergeNumberHash>::new(
+        5,
+        vec![(2, node_2.clone()), (3, node_5.clone())],
+    );
+    assert_eq!(
+        forgery.verify(real_root, vec![]),
+        Err(Error::CorruptedProof),
+    );
+}
+
+#[test]
 fn test_node_incremental_proof_rejects_reordered_false_prev_root() {
     let store = MemStore::default();
     let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, &store);

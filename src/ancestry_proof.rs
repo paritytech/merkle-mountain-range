@@ -1,7 +1,7 @@
 use crate::collections::VecDeque;
 use crate::helper::{
-    get_peak_map, get_peaks, is_descendant_pos, leaf_index_to_mmr_size, leaf_index_to_pos,
-    parent_offset, pos_height_in_tree, sibling_offset,
+    get_peak_map, get_peaks, is_descendant_pos, is_valid_mmr_size, leaf_index_to_mmr_size,
+    leaf_index_to_pos, parent_offset, pos_height_in_tree, sibling_offset,
 };
 pub use crate::mmr::bagging_peaks_hashes;
 use crate::mmr::take_while_vec;
@@ -28,6 +28,11 @@ pub struct AncestryProof<T, M> {
 impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> AncestryProof<T, M> {
     // TODO: restrict roots to be T::Node
     pub fn verify_ancestor(&self, root: T, prev_root: T) -> Result<bool> {
+        if !is_valid_mmr_size(self.prev_peaks_proof.mmr_size)
+            || !is_valid_mmr_size(self.prev_mmr_size)
+        {
+            return Err(Error::CorruptedProof);
+        }
         let current_leaves_count = get_peak_map(self.prev_peaks_proof.mmr_size);
         if current_leaves_count <= self.prev_peaks.len() as u64 {
             return Err(Error::CorruptedProof);
@@ -106,6 +111,9 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> NodeMerkleProof<T, M> {
     /// - The MMR, which could generate the old root, appends all incremental leaves, becomes the
     ///   current MMR.
     pub fn verify_incremental(&self, root: T, prev_root: T, incremental: Vec<T>) -> Result<bool> {
+        if !is_valid_mmr_size(self.mmr_size) {
+            return Err(Error::CorruptedProof);
+        }
         let current_leaves_count = get_peak_map(self.mmr_size);
         if current_leaves_count <= incremental.len() as u64 {
             return Err(Error::CorruptedProof);
@@ -269,6 +277,9 @@ fn calculate_peaks_hashes<
     mmr_size: u64,
     proof_iter: I,
 ) -> Result<Vec<T>> {
+    if !is_valid_mmr_size(mmr_size) {
+        return Err(Error::CorruptedProof);
+    }
     // special handle the only 1 leaf MMR
     if mmr_size == 1 && nodes.len() == 1 && nodes[0].0 == 0 {
         return Ok(nodes.into_iter().map(|(_pos, item)| item).collect());
