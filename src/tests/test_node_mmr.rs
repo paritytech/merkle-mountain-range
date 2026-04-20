@@ -1,4 +1,5 @@
 use super::{MergeNumberHash, NumberHash};
+use crate::ancestry_proof::{bagging_peaks_hashes, NodeMerkleProof};
 use crate::{
     leaf_index_to_mmr_size,
     util::{MemMMR, MemStore},
@@ -153,6 +154,74 @@ fn test_gen_root_from_proof() {
 #[test]
 fn test_gen_proof_with_duplicate_leaves() {
     test_mmr(10, vec![5, 5]);
+}
+
+#[test]
+fn test_node_proof_rejects_conflicting_duplicate_positions() {
+    let store = MemStore::default();
+    let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, &store);
+    let positions: Vec<u64> = (0u32..2)
+        .map(|i| mmr.push(NumberHash::from(i)).unwrap())
+        .collect();
+    let root = mmr.get_root().unwrap();
+    let proof = mmr.gen_node_proof(vec![positions[0]]).unwrap();
+
+    let conflicting_claims = vec![
+        (positions[0], NumberHash::from(0)),
+        (positions[0], NumberHash::from(31337)),
+    ];
+
+    assert_eq!(
+        proof.verify(root, conflicting_claims),
+        Err(Error::CorruptedProof)
+    );
+}
+
+#[test]
+fn test_node_incremental_proof_rejects_reordered_false_prev_root() {
+    let store = MemStore::default();
+    let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, &store);
+    let positions: Vec<u64> = (0u32..4)
+        .map(|i| mmr.push(NumberHash::from(i)).unwrap())
+        .collect();
+
+    let current_root = mmr.get_root().unwrap();
+    let peak_0_1 = mmr.batch().get_elem(2).unwrap().unwrap();
+    let leaf_2 = mmr.batch().get_elem(positions[2]).unwrap().unwrap();
+    let correct_prev_root =
+        bagging_peaks_hashes::<_, MergeNumberHash>(vec![peak_0_1.clone(), leaf_2.clone()]).unwrap();
+    let forged_prev_root =
+        bagging_peaks_hashes::<_, MergeNumberHash>(vec![leaf_2.clone(), peak_0_1.clone()]).unwrap();
+
+    assert_ne!(correct_prev_root, forged_prev_root);
+
+    let reordered_proof = NodeMerkleProof::<_, MergeNumberHash>::new(
+        mmr.mmr_size(),
+        vec![(positions[2], leaf_2.clone()), (2, peak_0_1.clone())],
+    );
+
+    assert_eq!(
+        reordered_proof.verify_incremental(
+            current_root.clone(),
+            forged_prev_root,
+            vec![NumberHash::from(3)],
+        ),
+        Err(Error::CorruptedProof),
+    );
+
+    let canonical_proof = NodeMerkleProof::<_, MergeNumberHash>::new(
+        mmr.mmr_size(),
+        vec![(2, peak_0_1), (positions[2], leaf_2)],
+    );
+
+    assert_eq!(
+        canonical_proof.verify_incremental(
+            current_root,
+            correct_prev_root,
+            vec![NumberHash::from(3)],
+        ),
+        Ok(true),
+    );
 }
 
 fn test_invalid_proof_verification(
@@ -344,7 +413,7 @@ proptest! {
         let mut leaves: Vec<u32> = (0..count).collect();
         let mut rng = thread_rng();
         leaves.shuffle(&mut rng);
-        let leaves_count = rng.gen_range(1..count - 1);
+        let leaves_count = rand::Rng::gen_range(&mut rng, 1..count - 1);
         leaves.truncate(leaves_count as usize);
         test_mmr(count, leaves);
     }

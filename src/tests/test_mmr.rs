@@ -277,7 +277,7 @@ proptest! {
         let mut leaves: Vec<u32> = (0..count).collect();
         let mut rng = thread_rng();
         leaves.shuffle(&mut rng);
-        let leaves_count = rng.gen_range(1..count - 1);
+        let leaves_count = rand::Rng::gen_range(&mut rng, 1..count - 1);
         leaves.truncate(leaves_count as usize);
         test_mmr(count, leaves);
     }

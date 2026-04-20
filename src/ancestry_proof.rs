@@ -1,7 +1,7 @@
 use crate::collections::VecDeque;
 use crate::helper::{
-    get_peak_map, get_peaks, is_descendant_pos, leaf_index_to_pos, parent_offset,
-    pos_height_in_tree, sibling_offset,
+    get_peak_map, get_peaks, is_descendant_pos, leaf_index_to_mmr_size, leaf_index_to_pos,
+    parent_offset, pos_height_in_tree, sibling_offset,
 };
 pub use crate::mmr::bagging_peaks_hashes;
 use crate::mmr::take_while_vec;
@@ -113,11 +113,23 @@ impl<T: Clone + PartialEq, M: Merge<Item = T>> NodeMerkleProof<T, M> {
         // Test if previous root is correct.
         let prev_leaves_count = current_leaves_count - incremental.len() as u64;
 
-        let prev_peaks: Vec<_> = self
-            .proof_items()
-            .iter()
-            .map(|(_, item)| item.clone())
-            .collect();
+        // Bind proof items to the canonical peak positions of the previous MMR, otherwise
+        // an attacker could permute the proof items and submit a forged `prev_root`
+        // computed by bagging peaks in a non-canonical order.
+        let prev_mmr_size = leaf_index_to_mmr_size(prev_leaves_count - 1);
+        let expected_prev_peak_positions = get_peaks(prev_mmr_size);
+        if self.proof.len() != expected_prev_peak_positions.len() {
+            return Err(Error::CorruptedProof);
+        }
+        let mut prev_peaks: Vec<T> = Vec::with_capacity(self.proof.len());
+        for (expected_pos, (actual_pos, item)) in
+            expected_prev_peak_positions.iter().zip(self.proof.iter())
+        {
+            if *actual_pos != *expected_pos {
+                return Err(Error::CorruptedProof);
+            }
+            prev_peaks.push(item.clone());
+        }
 
         let calculated_prev_root = bagging_peaks_hashes::<T, M>(prev_peaks)?;
         if calculated_prev_root != prev_root {
@@ -262,13 +274,20 @@ fn calculate_peaks_hashes<
         return Ok(nodes.into_iter().map(|(_pos, item)| item).collect());
     }
 
-    // ensure nodes are sorted and unique
     let mut nodes: Vec<_> = nodes
         .into_iter()
         .chain(proof_iter.cloned())
         .sorted_by_key(|(pos, _)| *pos)
-        .dedup_by(|a, b| a.0 == b.0)
         .collect();
+
+    // Reject conflicting entries at the same position before deduping; otherwise a single
+    // proof could verify contradictory values for the same node.
+    for pair in nodes.windows(2) {
+        if pair[0].0 == pair[1].0 && pair[0].1 != pair[1].1 {
+            return Err(Error::CorruptedProof);
+        }
+    }
+    nodes.dedup_by(|a, b| a.0 == b.0);
 
     let peaks = get_peaks(mmr_size);
 
