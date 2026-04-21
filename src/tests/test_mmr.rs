@@ -287,3 +287,40 @@ proptest! {
         test_gen_new_root_from_proof(count);
     }
 }
+
+#[test]
+fn test_duplicate_leaf_soundness_vuln() {
+    let store = MemStore::default();
+    let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, &store);
+    let positions: Vec<u64> = (0u32..11)
+        .map(|i| mmr.push(NumberHash::from(i)).unwrap())
+        .collect();
+    let root = mmr.get_root().expect("get root");
+
+    let real_elem = 5u32;
+    let real_pos = positions[real_elem as usize];
+    let real_leaf = NumberHash::from(real_elem);
+    let fake_leaf = NumberHash::from(9999u32);
+    assert_ne!(fake_leaf, real_leaf);
+
+    let proof = mmr.gen_proof(vec![real_pos]).expect("gen proof");
+    mmr.commit().expect("commit");
+
+    // A real leaf and a forged one at the same position must be rejected:
+    // a silent dedup would let the caller trust the forged entry.
+    match proof.verify(
+        root.clone(),
+        vec![(real_pos, real_leaf.clone()), (real_pos, fake_leaf)],
+    ) {
+        Err(Error::CorruptedProof) => {}
+        other => panic!("expected CorruptedProof, got {:?}", other),
+    }
+
+    // Identical duplicates are harmless and get deduped, so verification still succeeds.
+    assert!(proof
+        .verify(
+            root,
+            vec![(real_pos, real_leaf.clone()), (real_pos, real_leaf)],
+        )
+        .expect("verify"));
+}

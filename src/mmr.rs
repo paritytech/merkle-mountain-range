@@ -640,7 +640,12 @@ fn calculate_peak_root<'a, T: 'a, M: Merge<Item = T>, I: Iterator<Item = &'a T>>
     Err(Error::CorruptedProof)
 }
 
-fn calculate_peaks_hashes<'a, T: 'a + Clone, M: Merge<Item = T>, I: Iterator<Item = &'a T>>(
+fn calculate_peaks_hashes<
+    'a,
+    T: 'a + Clone + PartialEq,
+    M: Merge<Item = T>,
+    I: Iterator<Item = &'a T>,
+>(
     mut leaves: Vec<(u64, T)>,
     mmr_size: u64,
     mut proof_iter: I,
@@ -659,6 +664,12 @@ fn calculate_peaks_hashes<'a, T: 'a + Clone, M: Merge<Item = T>, I: Iterator<Ite
     }
     // ensure leaves are sorted and unique
     leaves.sort_by_key(|(pos, _)| *pos);
+    // Reject conflicting entries at the same position.
+    for pair in leaves.windows(2) {
+        if pair[0].0 == pair[1].0 && pair[0].1 != pair[1].1 {
+            return Err(Error::CorruptedProof);
+        }
+    }
     leaves.dedup_by(|a, b| a.0 == b.0);
     let peaks = get_peaks(mmr_size);
 
@@ -714,7 +725,7 @@ pub fn bagging_peaks_hashes<T, M: Merge<Item = T>>(mut peaks_hashes: Vec<T>) -> 
 /// 1. sort items by position
 /// 2. calculate root of each peak
 /// 3. bagging peaks
-fn calculate_root<'a, T: 'a + Clone, M: Merge<Item = T>, I: Iterator<Item = &'a T>>(
+fn calculate_root<'a, T: 'a + Clone + PartialEq, M: Merge<Item = T>, I: Iterator<Item = &'a T>>(
     leaves: Vec<(u64, T)>,
     mmr_size: u64,
     proof_iter: I,
