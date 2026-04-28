@@ -1,6 +1,6 @@
 use super::{MergeNumberHash, NumberHash};
 use crate::{
-    helper::{get_peak_map, get_peaks, pos_height_in_tree},
+    helper::{get_peak_map, get_peaks, is_valid_mmr_size, pos_height_in_tree},
     leaf_index_to_mmr_size, leaf_index_to_pos,
     util::MemStore,
     MMR,
@@ -93,6 +93,24 @@ fn test_get_peaks() {
     assert_eq!(get_peaks(19), vec![14, 17, 18]);
 }
 
+#[test]
+fn test_is_valid_mmr_size() {
+    assert!(is_valid_mmr_size(0));
+    assert!(is_valid_mmr_size(1));
+    assert!(!is_valid_mmr_size(2));
+    assert!(is_valid_mmr_size(3));
+    assert!(is_valid_mmr_size(4));
+    assert!(!is_valid_mmr_size(5));
+    assert!(!is_valid_mmr_size(6));
+    assert!(is_valid_mmr_size(7));
+    assert!(is_valid_mmr_size(8));
+    assert!(!is_valid_mmr_size(9));
+    assert!(is_valid_mmr_size(10));
+    assert!(is_valid_mmr_size(11));
+    assert!(is_valid_mmr_size(15));
+    assert!(is_valid_mmr_size(19));
+}
+
 proptest! {
     #[test]
     fn test_leaf_index_to_pos_randomly(index in 0..INDEX_TO_POS.len()) {
@@ -103,5 +121,10 @@ proptest! {
     #[test]
     fn test_leaf_index_to_mmr_size_randomly(index in 0..INDEX_TO_MMR_SIZE.len()) {
         assert_eq!(leaf_index_to_mmr_size(index as u64), INDEX_TO_MMR_SIZE[index]);
+    }
+
+    #[test]
+    fn test_is_valid_mmr_size_matches_generator(index in 0..INDEX_TO_MMR_SIZE.len()) {
+        assert!(is_valid_mmr_size(INDEX_TO_MMR_SIZE[index]));
     }
 }

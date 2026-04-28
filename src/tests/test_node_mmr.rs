@@ -1,4 +1,5 @@
 use super::{MergeNumberHash, NumberHash};
+use crate::ancestry_proof::{bagging_peaks_hashes, NodeMerkleProof};
 use crate::{
     leaf_index_to_mmr_size,
     util::{MemMMR, MemStore},
@@ -153,6 +154,104 @@ fn test_gen_root_from_proof() {
 #[test]
 fn test_gen_proof_with_duplicate_leaves() {
     test_mmr(10, vec![5, 5]);
+}
+
+#[test]
+fn test_node_proof_rejects_conflicting_duplicate_positions() {
+    let store = MemStore::default();
+    let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, &store);
+    let positions: Vec<u64> = (0u32..2)
+        .map(|i| mmr.push(NumberHash::from(i)).unwrap())
+        .collect();
+    let root = mmr.get_root().unwrap();
+    let proof = mmr.gen_node_proof(vec![positions[0]]).unwrap();
+
+    let conflicting_claims = vec![
+        (positions[0], NumberHash::from(0)),
+        (positions[0], NumberHash::from(31337)),
+    ];
+
+    assert_eq!(
+        proof.verify(root, conflicting_claims),
+        Err(Error::CorruptedProof)
+    );
+}
+
+#[test]
+fn test_node_proof_rejects_invalid_mmr_size_forgery() {
+    // Build a real 4-leaf MMR (mmr_size = 7). Its single peak is node_6 = merge(node_2, node_5),
+    // where node_2 = merge(leaf_0, leaf_1) and node_5 = merge(leaf_2, leaf_3).
+    //
+    // Attack: an attacker crafts a NodeMerkleProof claiming an invalid mmr_size of 5.
+    // `get_peaks(5)` silently rounds to the last valid MMR and returns [2, 3], and the
+    // attacker places node_2 at position 2 and node_5 at position 3. Neither position is
+    // climbed (each peak receives exactly one entry at the peak position), so the "peaks"
+    // are the attacker's node hashes directly, and bagging them reproduces node_6 — the
+    // real root — without the attacker having to break any hash.
+    let store = MemStore::default();
+    let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, &store);
+    for i in 0u32..4 {
+        mmr.push(NumberHash::from(i)).unwrap();
+    }
+    let real_root = mmr.get_root().unwrap();
+    let node_2 = mmr.batch().get_elem(2).unwrap().unwrap();
+    let node_5 = mmr.batch().get_elem(5).unwrap().unwrap();
+
+    let forgery = NodeMerkleProof::<_, MergeNumberHash>::new(
+        5,
+        vec![(2, node_2.clone()), (3, node_5.clone())],
+    );
+    assert_eq!(
+        forgery.verify(real_root, vec![]),
+        Err(Error::CorruptedProof),
+    );
+}
+
+#[test]
+fn test_node_incremental_proof_rejects_reordered_false_prev_root() {
+    let store = MemStore::default();
+    let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, &store);
+    let positions: Vec<u64> = (0u32..4)
+        .map(|i| mmr.push(NumberHash::from(i)).unwrap())
+        .collect();
+
+    let current_root = mmr.get_root().unwrap();
+    let peak_0_1 = mmr.batch().get_elem(2).unwrap().unwrap();
+    let leaf_2 = mmr.batch().get_elem(positions[2]).unwrap().unwrap();
+    let correct_prev_root =
+        bagging_peaks_hashes::<_, MergeNumberHash>(vec![peak_0_1.clone(), leaf_2.clone()]).unwrap();
+    let forged_prev_root =
+        bagging_peaks_hashes::<_, MergeNumberHash>(vec![leaf_2.clone(), peak_0_1.clone()]).unwrap();
+
+    assert_ne!(correct_prev_root, forged_prev_root);
+
+    let reordered_proof = NodeMerkleProof::<_, MergeNumberHash>::new(
+        mmr.mmr_size(),
+        vec![(positions[2], leaf_2.clone()), (2, peak_0_1.clone())],
+    );
+
+    assert_eq!(
+        reordered_proof.verify_incremental(
+            current_root.clone(),
+            forged_prev_root,
+            vec![NumberHash::from(3)],
+        ),
+        Err(Error::CorruptedProof),
+    );
+
+    let canonical_proof = NodeMerkleProof::<_, MergeNumberHash>::new(
+        mmr.mmr_size(),
+        vec![(2, peak_0_1), (positions[2], leaf_2)],
+    );
+
+    assert_eq!(
+        canonical_proof.verify_incremental(
+            current_root,
+            correct_prev_root,
+            vec![NumberHash::from(3)],
+        ),
+        Ok(true),
+    );
 }
 
 fn test_invalid_proof_verification(
@@ -344,7 +443,7 @@ proptest! {
         let mut leaves: Vec<u32> = (0..count).collect();
         let mut rng = thread_rng();
         leaves.shuffle(&mut rng);
-        let leaves_count = rng.gen_range(1..count - 1);
+        let leaves_count = rand::Rng::gen_range(&mut rng, 1..count - 1);
         leaves.truncate(leaves_count as usize);
         test_mmr(count, leaves);
     }
@@ -353,4 +452,36 @@ proptest! {
     fn test_random_gen_root_with_new_leaf(count in 1u32..500u32) {
         test_gen_new_root_from_proof(count);
     }
+}
+
+#[test]
+fn test_duplicate_leaf_soundness_vuln_node_proof() {
+    let store = MemStore::default();
+    let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, &store);
+    let positions: Vec<u64> = (0u32..11)
+        .map(|i| mmr.push(NumberHash::from(i)).unwrap())
+        .collect();
+    let root = mmr.get_root().expect("get root");
+
+    let real_elem = 5u32;
+    let real_pos = positions[real_elem as usize];
+    let real_leaf = NumberHash::from(real_elem);
+    let fake_leaf = NumberHash::from(9999u32);
+    assert_ne!(fake_leaf, real_leaf);
+
+    let proof = mmr.gen_node_proof(vec![real_pos]).expect("gen proof");
+    mmr.commit().expect("commit");
+
+    // A node-proof verifier must reject a nodes list that contains conflicting entries
+    // at the same position — otherwise the caller could be tricked into trusting a fake
+    // leaf smuggled in alongside a real one.
+    let leaves_with_fake = vec![(real_pos, real_leaf.clone()), (real_pos, fake_leaf.clone())];
+    match proof.verify(root.clone(), leaves_with_fake) {
+        Err(Error::CorruptedProof) => {}
+        other => panic!("expected CorruptedProof, got {:?}", other),
+    }
+
+    // Identical duplicates are harmless and get deduped.
+    let leaves_identical_dupes = vec![(real_pos, real_leaf.clone()), (real_pos, real_leaf.clone())];
+    assert!(proof.verify(root, leaves_identical_dupes).expect("verify"));
 }
