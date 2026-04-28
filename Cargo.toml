@@ -2,9 +2,9 @@
 name = "polkadot-ckb-merkle-mountain-range"
 version = "0.8.2"
 authors = [
-	"Nervos Core Dev <dev@nervos.org>",
-	"Parity Technologies <admin@parity.io>",
-	"Robert Hambrock <roberthambrock@gmail.com>"
+    "Nervos Core Dev <dev@nervos.org>",
+    "Parity Technologies <admin@parity.io>",
+    "Robert Hambrock <roberthambrock@gmail.com>",
 ]
 
 edition = "2018"
@@ -14,6 +14,7 @@ repository = "https://github.com/paritytech/merkle-mountain-range"
 
 [features]
 default = ["std"]
+production-bench = []
 std = []
 
 [dependencies]
