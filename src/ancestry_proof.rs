@@ -401,8 +401,6 @@ pub(crate) fn ancestry_proof_layout(
     if mmr_size == 1 && pos_list == [0] {
         return Ok((Vec::new(), Vec::new()));
     }
-    pos_list.sort_unstable();
-    pos_list.dedup();
     let mut positions: Vec<u64> = Vec::new();
     let mut bagging_track = 0;
     for peak_pos in get_peaks(mmr_size) {

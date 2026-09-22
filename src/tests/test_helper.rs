@@ -94,6 +94,19 @@ fn test_get_peaks() {
 }
 
 #[test]
+fn test_get_peaks_strictly_ascending() {
+    // Valid or not, the peaks come out strictly ascending, so callers need neither a sort nor a
+    // dedup.
+    for mmr_size in (0..=4096).chain([u64::MAX >> 1, u64::MAX - 1, u64::MAX]) {
+        let peaks = get_peaks(mmr_size);
+        assert!(
+            peaks.windows(2).all(|w| w[0] < w[1]),
+            "get_peaks({mmr_size}) is not strictly ascending: {peaks:?}"
+        );
+    }
+}
+
+#[test]
 fn test_is_valid_mmr_size() {
     assert!(is_valid_mmr_size(0));
     assert!(is_valid_mmr_size(1));
