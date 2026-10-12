@@ -13,7 +13,9 @@ pub fn leaf_index_to_mmr_size(index: u64) -> u64 {
     // the peak count(k) is actually the count of 1 in leaves count's binary representation
     let peak_count = leaves_count.count_ones() as u64;
 
-    2 * leaves_count - peak_count
+    // `2 * leaves_count - peak_count`, written so it cannot overflow for a size that fits in u64:
+    // 2^63 leaves make u64::MAX nodes.
+    leaves_count + (leaves_count - peak_count)
 }
 
 /// Whether `mmr_size` is the size of a well-formed MMR.

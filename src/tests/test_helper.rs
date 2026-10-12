@@ -126,6 +126,15 @@ fn test_is_valid_mmr_size() {
     assert!(is_valid_mmr_size(19));
 }
 
+#[test]
+fn test_is_valid_mmr_size_at_u64_max() {
+    // 2^63 leaves make 2^64 - 1 nodes, the largest u64 size; computing it must not overflow.
+    assert_eq!(leaf_index_to_mmr_size((1 << 63) - 1), u64::MAX);
+    assert!(is_valid_mmr_size(u64::MAX));
+    assert!(!is_valid_mmr_size(u64::MAX - 1));
+    assert!(crate::ancestry_proof::ancestry_proof_positions(1, u64::MAX).is_ok());
+}
+
 proptest! {
     #[test]
     fn test_leaf_index_to_pos_randomly(index in 0..INDEX_TO_POS.len()) {
