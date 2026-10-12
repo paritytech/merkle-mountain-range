@@ -65,7 +65,7 @@ fn test_ancestry_proof_positions_match_generated_proof() {
                 .map(|(pos, _)| *pos)
                 .collect();
             let derived = ancestry_proof_positions(prev_size, mmr_size).expect("positions");
-            assert_eq!(derived, generated, "k={k} n={n}");
+            assert_eq!(derived, generated, "k={} n={}", k, n);
             assert_eq!(
                 derived.len(),
                 expected_ancestry_proof_size(prev_size, mmr_size)

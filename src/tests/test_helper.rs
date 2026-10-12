@@ -101,7 +101,9 @@ fn test_get_peaks_strictly_ascending() {
         let peaks = get_peaks(mmr_size);
         assert!(
             peaks.windows(2).all(|w| w[0] < w[1]),
-            "get_peaks({mmr_size}) is not strictly ascending: {peaks:?}"
+            "get_peaks({}) is not strictly ascending: {:?}",
+            mmr_size,
+            peaks
         );
     }
 }
