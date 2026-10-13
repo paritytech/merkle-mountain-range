@@ -366,8 +366,8 @@ fn calculate_root<
 ///
 /// Verifier-facing, so bad sizes are a `CorruptedProof`, as the verifiers report them: both must be
 /// valid MMR sizes, and `prev_mmr_size` non-zero and at most `mmr_size`.
-/// `gen_ancestry_proof` shares the layout below but not these checks. Sizes are not bounded here: a
-/// caller deriving positions from untrusted sizes should cap them, as it would before generating.
+/// `gen_ancestry_proof` shares the layout below but not these checks. Any `u64` sizes are cheap:
+/// the result has at most 63 positions.
 pub fn ancestry_proof_positions(prev_mmr_size: u64, mmr_size: u64) -> Result<Vec<u64>> {
     if prev_mmr_size == 0
         || prev_mmr_size > mmr_size
