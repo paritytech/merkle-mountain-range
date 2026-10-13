@@ -364,13 +364,16 @@ fn calculate_root<
 /// store. A verifier that receives an ancestry proof as bare hashes can re-derive their positions
 /// with it and hand `(position, hash)` pairs to [`NodeMerkleProof`].
 ///
-/// Verifier-facing, so both arguments are checked to be valid MMR sizes (`CorruptedProof`
-/// otherwise, as the verifiers report it); `gen_ancestry_proof` shares the layout below but not
-/// this check. `prev_mmr_size` must describe a non-empty MMR whose peaks all lie within `mmr_size`
-/// (`GenProofForInvalidNodes`). Sizes are not bounded here: a caller deriving positions from
-/// untrusted sizes should cap them, as it would before generating.
+/// Verifier-facing, so bad sizes are a `CorruptedProof`, as the verifiers report them: both must be
+/// valid MMR sizes, and `prev_mmr_size` non-zero and at most `mmr_size`.
+/// `gen_ancestry_proof` shares the layout below but not these checks. Sizes are not bounded here: a
+/// caller deriving positions from untrusted sizes should cap them, as it would before generating.
 pub fn ancestry_proof_positions(prev_mmr_size: u64, mmr_size: u64) -> Result<Vec<u64>> {
-    if !is_valid_mmr_size(prev_mmr_size) || !is_valid_mmr_size(mmr_size) {
+    if prev_mmr_size == 0
+        || prev_mmr_size > mmr_size
+        || !is_valid_mmr_size(prev_mmr_size)
+        || !is_valid_mmr_size(mmr_size)
+    {
         return Err(Error::CorruptedProof);
     }
     let (mut positions, bagged_run) = ancestry_proof_layout(prev_mmr_size, mmr_size)?;

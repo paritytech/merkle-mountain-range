@@ -77,9 +77,15 @@ fn test_ancestry_proof_positions_match_generated_proof() {
 #[test]
 fn test_ancestry_proof_positions_rejects_what_gen_ancestry_proof_rejects() {
     // An empty previous MMR has no peaks to prove.
-    assert!(ancestry_proof_positions(0, 7).is_err());
+    assert!(matches!(
+        ancestry_proof_positions(0, 7),
+        Err(Error::CorruptedProof)
+    ));
     // A previous MMR larger than the current one has peaks outside it.
-    assert!(ancestry_proof_positions(7, 4).is_err());
+    assert!(matches!(
+        ancestry_proof_positions(7, 4),
+        Err(Error::CorruptedProof)
+    ));
     // The single-leaf identity case: nothing to prove.
     assert_eq!(ancestry_proof_positions(1, 1).unwrap(), Vec::<u64>::new());
     // Sizes that are not MMR sizes are rejected the way the verifiers reject them.
