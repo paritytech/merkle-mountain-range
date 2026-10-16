@@ -67,6 +67,45 @@ The merkle proof is an array of hashes constructed with the following parts:
 
 We can reconstruct the merkle root from the proofs. Pre-calculating the peak positions from the size of MMR may help us do the bagging.
 
+## Benchmarks
+
+The default benchmarks can be run with
+```bash
+cargo bench
+```
+
+The results is stored in `target/criterion` and for instance be viewed in the generated HTML report at `target/criterion/report/index.html`.
+
+To compare benchmark results between git revisions `baseline_rev` and `update_rev`:
+```bash
+# Run & save benchmarks on baseline revision
+git checkout $baseline_rev
+cargo bench --bench mmr_benchmark -- --save-baseline $baseline_rev
+
+# Switch to updated revision, run & save benchmarks
+git checkout $update_rev
+cargo bench --bench mmr_benchmark -- --save-baseline $update_rev
+
+# Optional: Compare results with critcmp
+cargo install critcmp  # if not already installed
+# critcmp orders benchmarks lexicographically by benchmark name
+echo baseline: $baseline_rev
+echo update: $update_rev
+echo -----
+critcmp $baseline_rev $update_rev
+```
+
+## Production Benchmarks
+
+For routine development and testing, the default benchmarks (200K leaves) should be sufficient.
+If making changes to the MMR logic (generation or proofs), to avoid performance regressions at production scale, it's recommended to run the MMR benchmarks with much higher MMR sizes before merging changes.benchmarks at production scale before merging changes.
+For Polkadot/Kusama a production scale of 40M leaves is appropriate - this can be benched using the `production-bench` feature:
+```bash
+cargo bench --features production-bench
+```
+
+**Note:** This scale may take hours to complete and requires substantial memory, approximately 12GB peak RAM usage for the MMR tests.
+
 ## References
 
 * [Merkle mountain range](https://github.com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.md)
