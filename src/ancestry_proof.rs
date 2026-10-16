@@ -5,6 +5,7 @@ use crate::helper::{
 };
 pub use crate::mmr::bagging_peaks_hashes;
 use crate::mmr::take_while_vec;
+use crate::util::VeqDequeExt;
 use crate::vec::Vec;
 use crate::{Error, Merge, Result};
 use core::fmt::Debug;
@@ -353,6 +354,133 @@ fn calculate_root<
 ) -> Result<T> {
     let peaks_hashes = calculate_peaks_hashes::<_, M, _>(nodes, mmr_size, proof_iter)?;
     bagging_peaks_hashes::<_, M>(peaks_hashes)
+}
+
+/// The positions of the items `MMR::gen_ancestry_proof(prev_mmr_size)` emits for an MMR of
+/// `mmr_size` nodes, in proof order — the exact positions its `prev_peaks_proof` carries, including
+/// the single item that stands for a bagged run of right-hand peaks.
+///
+/// An MMR's shape is fixed by its size, so this is a pure function of the two sizes and needs no
+/// store. A verifier that receives an ancestry proof as bare hashes can re-derive their positions
+/// with it and hand `(position, hash)` pairs to [`NodeMerkleProof`].
+///
+/// Verifier-facing, so bad sizes are a `CorruptedProof`, as the verifiers report them: both must be
+/// valid MMR sizes, and `prev_mmr_size` non-zero and at most `mmr_size`.
+/// `gen_ancestry_proof` shares the layout below but not these checks. Any `u64` sizes are cheap:
+/// the result has at most 63 positions.
+pub fn ancestry_proof_positions(prev_mmr_size: u64, mmr_size: u64) -> Result<Vec<u64>> {
+    if prev_mmr_size == 0
+        || prev_mmr_size > mmr_size
+        || !is_valid_mmr_size(prev_mmr_size)
+        || !is_valid_mmr_size(mmr_size)
+    {
+        return Err(Error::CorruptedProof);
+    }
+    let (mut positions, bagged_run) = ancestry_proof_layout(prev_mmr_size, mmr_size)?;
+    // The generator bags the trailing run into one item at the position of its first peak.
+    if let Some(&first) = bagged_run.first() {
+        positions.push(first);
+    }
+    positions.sort_unstable();
+    Ok(positions)
+}
+
+/// The proof-item positions of an ancestry proof, in emission order, split into the individually
+/// proven positions and the trailing run of right-hand peaks with nothing proven beneath them that
+/// the proof bags into a single item (empty unless there are at least two). `gen_ancestry_proof`
+/// fetches both from the store and bags the run's hashes; [`ancestry_proof_positions`] keeps only
+/// the run's first position. Splitting here keeps that boundary in one place.
+///
+/// Errors as `gen_ancestry_proof` always has: `GenProofForInvalidNodes` for an empty previous MMR
+/// or one whose peaks do not all lie within `mmr_size`.
+pub(crate) fn ancestry_proof_layout(
+    prev_mmr_size: u64,
+    mmr_size: u64,
+) -> Result<(Vec<u64>, Vec<u64>)> {
+    let mut pos_list = get_peaks(prev_mmr_size);
+    if pos_list.is_empty() {
+        return Err(Error::GenProofForInvalidNodes);
+    }
+    if mmr_size == 1 && pos_list == [0] {
+        return Ok((Vec::new(), Vec::new()));
+    }
+    let mut positions: Vec<u64> = Vec::new();
+    let mut bagging_track = 0;
+    for peak_pos in get_peaks(mmr_size) {
+        let pos_list: Vec<_> = take_while_vec(&mut pos_list, |&pos| pos <= peak_pos);
+        if pos_list.is_empty() {
+            bagging_track += 1;
+        } else {
+            bagging_track = 0;
+        }
+        node_proof_positions_for_peak(&mut positions, pos_list, peak_pos);
+    }
+    if !pos_list.is_empty() {
+        return Err(Error::GenProofForInvalidNodes);
+    }
+    // A run of two or more trailing peaks with nothing proven beneath them is bagged into one item.
+    let bagged_run = if bagging_track > 1 {
+        positions.split_off(positions.len() - bagging_track)
+    } else {
+        Vec::new()
+    };
+    Ok((positions, bagged_run))
+}
+
+/// The positions a node proof for `pos_list` under the peak at `peak_pos` consists of, appended to
+/// `positions`: the store-free half of `MMR::gen_node_proof_for_peak`, which fetches exactly these.
+pub(crate) fn node_proof_positions_for_peak(
+    positions: &mut Vec<u64>,
+    pos_list: Vec<u64>,
+    peak_pos: u64,
+) {
+    // Nothing to prove if the position itself is the peak.
+    if pos_list.len() == 1 && pos_list == [peak_pos] {
+        return;
+    }
+    // The peak root stands in when no positions beneath it are proven.
+    if pos_list.is_empty() {
+        positions.push(peak_pos);
+        return;
+    }
+
+    let mut queue: VecDeque<_> = VecDeque::new();
+    for value in pos_list.iter().map(|pos| (pos_height_in_tree(*pos), *pos)) {
+        queue.insert_sorted(value);
+    }
+
+    while let Some((height, pos)) = queue.pop_front() {
+        debug_assert!(pos <= peak_pos);
+        if pos == peak_pos {
+            if queue.is_empty() {
+                break;
+            } else {
+                continue;
+            }
+        }
+
+        let (sib_pos, parent_pos) = {
+            let next_height = pos_height_in_tree(pos + 1);
+            let sibling_offset = sibling_offset(height);
+            if next_height > height {
+                // `pos` is a right sibling
+                (pos - sibling_offset, pos + 1)
+            } else {
+                // `pos` is a left sibling
+                (pos + sibling_offset, pos + parent_offset(height))
+            }
+        };
+
+        if Some(&sib_pos) == queue.front().map(|(_, pos)| pos) {
+            // The sibling is itself being proven; drop it.
+            queue.pop_front();
+        } else {
+            positions.push(sib_pos);
+        }
+        if parent_pos < peak_pos {
+            queue.insert_sorted((height + 1, parent_pos));
+        }
+    }
 }
 
 pub fn expected_ancestry_proof_size(prev_mmr_size: u64, mmr_size: u64) -> usize {

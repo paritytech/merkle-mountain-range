@@ -94,6 +94,21 @@ fn test_get_peaks() {
 }
 
 #[test]
+fn test_get_peaks_strictly_ascending() {
+    // Valid or not, the peaks come out strictly ascending, so callers need neither a sort nor a
+    // dedup.
+    for mmr_size in (0..=4096).chain([u64::MAX >> 1, u64::MAX - 1, u64::MAX]) {
+        let peaks = get_peaks(mmr_size);
+        assert!(
+            peaks.windows(2).all(|w| w[0] < w[1]),
+            "get_peaks({}) is not strictly ascending: {:?}",
+            mmr_size,
+            peaks
+        );
+    }
+}
+
+#[test]
 fn test_is_valid_mmr_size() {
     assert!(is_valid_mmr_size(0));
     assert!(is_valid_mmr_size(1));
@@ -109,6 +124,15 @@ fn test_is_valid_mmr_size() {
     assert!(is_valid_mmr_size(11));
     assert!(is_valid_mmr_size(15));
     assert!(is_valid_mmr_size(19));
+}
+
+#[test]
+fn test_is_valid_mmr_size_at_u64_max() {
+    // 2^63 leaves make 2^64 - 1 nodes, the largest u64 size; computing it must not overflow.
+    assert_eq!(leaf_index_to_mmr_size((1 << 63) - 1), u64::MAX);
+    assert!(is_valid_mmr_size(u64::MAX));
+    assert!(!is_valid_mmr_size(u64::MAX - 1));
+    assert!(crate::ancestry_proof::ancestry_proof_positions(1, u64::MAX).is_ok());
 }
 
 proptest! {
