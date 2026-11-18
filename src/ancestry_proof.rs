@@ -47,6 +47,20 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> AncestryProof<T, M> {
             prev_peaks_positions
         };
 
+        // Test if the positions of the proof items are correct.
+        let mut positions: Vec<u64> = self
+            .prev_peaks_proof
+            .proof
+            .iter()
+            .map(|(pos, _)| *pos)
+            .collect();
+        positions.sort_unstable();
+        if positions
+            != ancestry_proof_positions(self.prev_mmr_size, self.prev_peaks_proof.mmr_size)?
+        {
+            return Err(Error::CorruptedProof);
+        }
+
         let calculated_prev_root = bagging_peaks_hashes::<T, M>(self.prev_peaks.clone())?;
         if calculated_prev_root != prev_root {
             return Ok(false);

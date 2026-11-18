@@ -2,7 +2,7 @@ use super::{MergeNumberHash, NumberHash};
 use crate::ancestry_proof::{ancestry_proof_positions, expected_ancestry_proof_size};
 use crate::leaf_index_to_mmr_size;
 use crate::util::{MemMMR, MemStore};
-use crate::Error;
+use crate::{AncestryProof, Error, Merge, NodeMerkleProof};
 
 #[test]
 fn test_ancestry() {
@@ -162,4 +162,91 @@ fn test_ancestry_proof_positions_shape_at_scale() {
             Ok(())
         })
         .unwrap();
+}
+
+/// Ancestry proofs whose items don't sit at the positions expected for the given MMR sizes must be
+/// rejected, even when they have the expected number of items.
+#[test]
+fn test_verify_ancestor_rejects_proof_with_unexpected_positions() {
+    let store = MemStore::default();
+    let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, &store);
+    for i in 0..3u32 {
+        mmr.push(NumberHash::from(i)).unwrap();
+    }
+    let mmr_size = mmr.mmr_size();
+    let root = mmr.get_root().unwrap();
+
+    let proof = mmr.gen_ancestry_proof(leaf_index_to_mmr_size(1)).unwrap();
+    let n2 = proof.prev_peaks[0].clone();
+    let n3 = proof.prev_peaks_proof.proof_items()[0].1.clone();
+    assert_eq!(root, MergeNumberHash::merge(&n3, &n2).unwrap());
+
+    let prev_mmr_size = leaf_index_to_mmr_size(0);
+    for items in [
+        vec![(1, n2.clone())],
+        vec![(1, n2.clone()), (1, n2.clone())],
+        vec![(1, n2.clone()), (2, root.clone())],
+    ] {
+        let altered_proof = AncestryProof::<_, MergeNumberHash> {
+            prev_mmr_size,
+            prev_peaks: vec![n3.clone()],
+            prev_peaks_proof: NodeMerkleProof::new(mmr_size, items.clone()),
+        };
+        assert!(
+            matches!(
+                altered_proof.verify_ancestor(root.clone(), n3.clone()),
+                Err(Error::CorruptedProof)
+            ),
+            "items={:?}",
+            items.iter().map(|(pos, _)| *pos).collect::<Vec<_>>()
+        );
+    }
+}
+
+/// Generated proofs with an item added or removed must be rejected, even if they still match the
+/// root.
+#[test]
+fn test_verify_ancestor_rejects_altered_proof_items() {
+    for n in 2..=64u64 {
+        let store = MemStore::default();
+        let mut mmr = MemMMR::<_, MergeNumberHash>::new(0, &store);
+        let mut prev_roots = Vec::new();
+        for i in 0..n {
+            mmr.push(NumberHash::from(i as u32)).unwrap();
+            prev_roots.push(mmr.get_root().unwrap());
+        }
+        let mmr_size = mmr.mmr_size();
+        let root = mmr.get_root().unwrap();
+        for k in 1..=n {
+            let proof = mmr
+                .gen_ancestry_proof(leaf_index_to_mmr_size(k - 1))
+                .unwrap();
+            let items = proof.prev_peaks_proof.proof_items().to_vec();
+            let prev_root = prev_roots[k as usize - 1].clone();
+
+            let mut altered_items = Vec::new();
+            if let Some(item) = items.first() {
+                let mut padded = items.clone();
+                padded.push(item.clone());
+                altered_items.push(padded);
+                altered_items.push(items[1..].to_vec());
+            }
+            for altered in altered_items {
+                let altered_proof = AncestryProof::<_, MergeNumberHash> {
+                    prev_mmr_size: proof.prev_mmr_size,
+                    prev_peaks: proof.prev_peaks.clone(),
+                    prev_peaks_proof: NodeMerkleProof::new(mmr_size, altered),
+                };
+                assert!(
+                    !matches!(
+                        altered_proof.verify_ancestor(root.clone(), prev_root.clone()),
+                        Ok(true)
+                    ),
+                    "k={} n={}",
+                    k,
+                    n
+                );
+            }
+        }
+    }
 }
