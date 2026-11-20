@@ -48,15 +48,14 @@ impl<T: PartialEq + Debug + Clone, M: Merge<Item = T>> AncestryProof<T, M> {
         };
 
         // Test if the positions of the proof items are correct.
-        let mut positions: Vec<u64> = self
+        let expected_positions =
+            ancestry_proof_positions(self.prev_mmr_size, self.prev_peaks_proof.mmr_size)?;
+        if !self
             .prev_peaks_proof
             .proof
             .iter()
             .map(|(pos, _)| *pos)
-            .collect();
-        positions.sort_unstable();
-        if positions
-            != ancestry_proof_positions(self.prev_mmr_size, self.prev_peaks_proof.mmr_size)?
+            .eq(expected_positions)
         {
             return Err(Error::CorruptedProof);
         }
